@@ -59,7 +59,7 @@ contract VeilendIntegrationTest is BaseTest {
         address flags = address(
             uint160(Hooks.BEFORE_REMOVE_LIQUIDITY_FLAG) ^ (0x6666 << 144)
         );
-        bytes memory constructorArgs = abi.encode(poolManager);
+        bytes memory constructorArgs = abi.encode(poolManager, address(this));
         deployCodeTo("CollateralLockHook.sol:CollateralLockHook", constructorArgs, flags);
         hook = CollateralLockHook(flags);
 

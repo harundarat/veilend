@@ -20,14 +20,16 @@ contract CollateralLockHook is BaseHook, ICollateralLockHook {
 
     error NotOwner();
     error NotVault();
+    error ZeroAddress();
     error PositionLocked(uint256 positionId);
 
     event VaultUpdated(address indexed vault);
     event LockRegistered(uint256 indexed positionId);
     event LockReleased(uint256 indexed positionId);
 
-    constructor(IPoolManager _poolManager) BaseHook(_poolManager) {
-        owner = msg.sender;
+    constructor(IPoolManager _poolManager, address _owner) BaseHook(_poolManager) {
+        if (_owner == address(0)) revert ZeroAddress();
+        owner = _owner;
     }
 
     function getHookPermissions() public pure override returns (Hooks.Permissions memory) {

@@ -39,7 +39,7 @@ contract CollateralLockHookTest is BaseTest {
         address flags = address(
             uint160(Hooks.BEFORE_REMOVE_LIQUIDITY_FLAG) ^ (0x4444 << 144) // Namespace the hook to avoid collisions
         );
-        bytes memory constructorArgs = abi.encode(poolManager);
+        bytes memory constructorArgs = abi.encode(poolManager, address(this));
         deployCodeTo("CollateralLockHook.sol:CollateralLockHook", constructorArgs, flags);
         hook = CollateralLockHook(flags);
 
@@ -144,6 +144,30 @@ contract CollateralLockHookTest is BaseTest {
         vm.prank(address(0xBEEF));
         vm.expectRevert(CollateralLockHook.NotOwner.selector);
         hook.setVault(address(this));
+    }
+
+    function test_constructor_setsEncodedOwner() public view {
+        assertEq(hook.owner(), address(this));
+    }
+
+    function test_constructor_zeroOwner_reverts() public {
+        // Regular `new` would fail BaseHook flag validation first. Run creation code
+        // at a flag-valid address so ZeroAddress is the revert we observe.
+        address flags = address(uint160(Hooks.BEFORE_REMOVE_LIQUIDITY_FLAG) ^ (0x7777 << 144));
+        bytes memory creationCode =
+            abi.encodePacked(type(CollateralLockHook).creationCode, abi.encode(poolManager, address(0)));
+        vm.etch(flags, creationCode);
+        vm.expectRevert(CollateralLockHook.ZeroAddress.selector);
+        this.runCreationCode(flags);
+    }
+
+    function runCreationCode(address target) external {
+        (bool success, bytes memory data) = target.call("");
+        if (!success) {
+            assembly {
+                revert(add(data, 0x20), mload(data))
+            }
+        }
     }
 
     function test_unlockPosition() public {

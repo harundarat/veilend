@@ -14,14 +14,16 @@ contract DeployHookScript is BaseScript {
         // hook contracts must have specific flags encoded in the address
         uint160 flags = uint160(Hooks.BEFORE_REMOVE_LIQUIDITY_FLAG);
 
-        // Mine a salt that will produce a hook address with the correct flags
-        bytes memory constructorArgs = abi.encode(poolManager);
+        // Mine a salt that will produce a hook address with the correct flags.
+        // Owner is passed explicitly: CREATE2 is executed by the factory, so msg.sender
+        // in the constructor would otherwise be CREATE2_FACTORY, not the broadcasting EOA.
+        bytes memory constructorArgs = abi.encode(poolManager, deployerAddress);
         (address hookAddress, bytes32 salt) =
             HookMiner.find(CREATE2_FACTORY, flags, type(CollateralLockHook).creationCode, constructorArgs);
 
         // Deploy the hook using CREATE2
         vm.startBroadcast();
-        CollateralLockHook hook = new CollateralLockHook{salt: salt}(poolManager);
+        CollateralLockHook hook = new CollateralLockHook{salt: salt}(poolManager, deployerAddress);
         vm.stopBroadcast();
 
         require(address(hook) == hookAddress, "DeployHookScript: Hook Address Mismatch");

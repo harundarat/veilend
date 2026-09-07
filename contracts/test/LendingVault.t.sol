@@ -70,7 +70,7 @@ contract LendingVaultTest is Test {
         mockStable = new MockERC20("Mock Stable", "mUSD");
 
         address flags = address(uint160(Hooks.BEFORE_REMOVE_LIQUIDITY_FLAG) ^ (0x5555 << 144));
-        bytes memory constructorArgs = abi.encode(IPoolManager(address(1)));
+        bytes memory constructorArgs = abi.encode(IPoolManager(address(1)), address(this));
         deployCodeTo("CollateralLockHook.sol:CollateralLockHook", constructorArgs, flags);
         hook = CollateralLockHook(flags);
 
