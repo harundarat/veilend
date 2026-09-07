@@ -7,10 +7,12 @@ import {Hooks} from "@uniswap/v4-core/src/libraries/Hooks.sol";
 import {IPoolManager, ModifyLiquidityParams} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 
+import {ICollateralLockHook} from "./interfaces/ICollateralLockHook.sol";
+
 /// @title CollateralLockHook
 /// @notice Blocks liquidity decreases on locked Uniswap v4 LP positions.
 /// @dev PositionManager keys each position with `salt = bytes32(tokenId)`.
-contract CollateralLockHook is BaseHook {
+contract CollateralLockHook is BaseHook, ICollateralLockHook {
     address public owner;
     address public vault;
 
