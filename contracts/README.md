@@ -101,6 +101,18 @@ forge script script/00_DeployHook.s.sol \
     --rpc-url http://localhost:8545 \
     --private-key <PRIVATE_KEY> \
     --broadcast
+
+forge script script/01_CreatePoolAndAddLiquidity.s.sol \
+    --rpc-url http://localhost:8545 \
+    --private-key <PRIVATE_KEY> \
+    --broadcast
+
+# TOKEN0, TOKEN1, HOOK_CONTRACT, and LOAN_TOKEN must be the local Anvil addresses
+# (script defaults are Sepolia). Then:
+forge script script/04_DeployVault.s.sol \
+    --rpc-url http://localhost:8545 \
+    --private-key <PRIVATE_KEY> \
+    --broadcast
 ```
 
 Local Uniswap v4 artifacts (Anvil only): `script/testing/00_DeployV4.s.sol`. Those deployments are **not** picked up automatically unless `test/utils/Deployers.sol` is updated.
@@ -131,19 +143,29 @@ forge script script/00_DeployHook.s.sol \
     --account <YOUR_WALLET_PRIVATE_KEY_NAME> \
     --sender <YOUR_WALLET_ADDRESS> \
     --broadcast
+
+forge script script/04_DeployVault.s.sol \
+    --rpc-url <YOUR_RPC_URL> \
+    --account <YOUR_WALLET_PRIVATE_KEY_NAME> \
+    --sender <YOUR_WALLET_ADDRESS> \
+    --broadcast
 ```
 
 ### Script configuration
 
-Before `01_CreatePoolAndAddLiquidity`, `02_AddLiquidity`, or `03_Swap`, set addresses in `.env` (see [`.env.example`](.env.example)):
+Before `01_CreatePoolAndAddLiquidity`, `02_AddLiquidity`, `03_Swap`, or `04_DeployVault`, set addresses in `.env` (see [`.env.example`](.env.example)):
 
 ```
 TOKEN0=<vUSD or other token0>
 TOKEN1=<vEUR or other token1>
 HOOK_CONTRACT=<CollateralLockHook>
+LOAN_TOKEN=<vdUSD>
+RELAYER=<credit-report signer; omit to use the deployer>
+VAULT_PREFUND=<vdUSD minted to the vault; 0 skips mint>
+REPLACE_VAULT=<true to overwrite an existing hook.vault(); default false>
 ```
 
-Foundry loads `.env` automatically. If a variable is unset, [`script/base/BaseScript.sol`](script/base/BaseScript.sol) falls back to the Sepolia `vUSD` / `vEUR` / `CollateralLockHook` addresses above. The hook address must match the pool key.
+Foundry loads `.env` automatically. If a variable is unset, [`script/base/BaseScript.sol`](script/base/BaseScript.sol) falls back to the Sepolia `vUSD` / `vEUR` / `CollateralLockHook` addresses above, and [`script/04_DeployVault.s.sol`](script/04_DeployVault.s.sol) falls back to Sepolia `vdUSD`, the broadcast sender as relayer, and a `1_000_000e18` prefund. The hook address must match an already-initialized pool. The broadcast sender must be the hook owner (`setVault`). A second run reverts unless `REPLACE_VAULT=true`.
 
 Also set amounts in:
 
