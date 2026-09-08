@@ -38,14 +38,15 @@ From Foundry `broadcast/*/11155111/run-latest.json`. Dry-runs are ignored.
 | MockERC20 `vdUSD` (Veilend Debt USD) | [`0xfe9E69853F0D7488b23CbCA8331E70c351f3bf8e`](https://sepolia.etherscan.io/address/0xfe9E69853F0D7488b23CbCA8331E70c351f3bf8e) | [`script/DeployMockTokens.s.sol`](script/DeployMockTokens.s.sol) |
 | `CollateralLockHook` | [`0xc727Bf24715514A5C574A001AaC0d7c0eC7EC200`](https://sepolia.etherscan.io/address/0xc727Bf24715514A5C574A001AaC0d7c0eC7EC200) | [`script/00_DeployHook.s.sol`](script/00_DeployHook.s.sol) (CREATE2) |
 
-Hook constructor arguments (from the same broadcast, not deployed by this repo):
+Related addresses (not deployed by this repo):
 
 | | Address |
 |---|---|
 | Uniswap v4 PoolManager (Sepolia) | [`0xE03A1074c86CFeDd5C142C4F04F1a1536e203543`](https://sepolia.etherscan.io/address/0xE03A1074c86CFeDd5C142C4F04F1a1536e203543) |
+| Uniswap v4 PositionManager (Sepolia) | [`0x429ba70129df741B2Ca2a85BC3A2a3328e5c09b4`](https://sepolia.etherscan.io/address/0x429ba70129df741B2Ca2a85BC3A2a3328e5c09b4) |
 | Hook owner / deployer | [`0xB34a4eAECB848d573a0410bc305787d5B69328B8`](https://sepolia.etherscan.io/address/0xB34a4eAECB848d573a0410bc305787d5B69328B8) |
 
-CREATE2 factory used to mine the hook address: [`0x4e59b44847b379578588920cA78FbF26c0B4956C`](https://sepolia.etherscan.io/address/0x4e59b44847b379578588920cA78FbF26c0B4956C). The mined address encodes `BEFORE_REMOVE_LIQUIDITY_FLAG`.
+Hook constructor arguments: PoolManager + owner. CREATE2 factory used to mine the hook address: [`0x4e59b44847b379578588920cA78FbF26c0B4956C`](https://sepolia.etherscan.io/address/0x4e59b44847b379578588920cA78FbF26c0B4956C). The mined address encodes `BEFORE_REMOVE_LIQUIDITY_FLAG`.
 
 Deploy transactions:
 
@@ -53,6 +54,15 @@ Deploy transactions:
 - `vEUR`: [`0x2a487ef4e0f3ec194f19d307473613aa4813c26148399eef1d8b7931cc110266`](https://sepolia.etherscan.io/tx/0x2a487ef4e0f3ec194f19d307473613aa4813c26148399eef1d8b7931cc110266)
 - `vdUSD`: [`0xc9255e7eb8fd6276ff24fea394bbddb5d73a3a54e2696622580a59d3800a500d`](https://sepolia.etherscan.io/tx/0xc9255e7eb8fd6276ff24fea394bbddb5d73a3a54e2696622580a59d3800a500d)
 - `CollateralLockHook`: [`0x5f8d7fbdaf45bdaf46387ef66cf3dc2ffb764c027ee9960b448fc6e6ea1088b2`](https://sepolia.etherscan.io/tx/0x5f8d7fbdaf45bdaf46387ef66cf3dc2ffb764c027ee9960b448fc6e6ea1088b2)
+
+### Demo pool (vUSD / vEUR)
+
+| | |
+|---|---|
+| PoolId | `0x8ca493510350e7ae46e05d9d04db161f2d3f0df33ee9f3fdfaf1601477c82042` |
+| Position NFT `tokenId` | `39014` |
+
+[`script/01_CreatePoolAndAddLiquidity.s.sol`](script/01_CreatePoolAndAddLiquidity.s.sol): [`0x9819ef90d15d3f7ee863a5cd8990614f89dc7280ecda36f635b3d4d96ca91e8a`](https://sepolia.etherscan.io/tx/0x9819ef90d15d3f7ee863a5cd8990614f89dc7280ecda36f635b3d4d96ca91e8a)
 
 ## Requirements
 
