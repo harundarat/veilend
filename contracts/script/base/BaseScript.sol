@@ -22,15 +22,21 @@ contract BaseScript is Script, Deployers {
     /////////////////////////////////////
     // --- Configure These ---
     /////////////////////////////////////
-    IERC20 internal constant token0 = IERC20(0x0165878A594ca255338adfa4d48449f69242Eb8F);
-    IERC20 internal constant token1 = IERC20(0xa513E6E4b8f2a923D98304ec87F64353C4D5C853);
-    IHooks constant hookContract = IHooks(address(0));
+    // Override via TOKEN0, TOKEN1, HOOK_CONTRACT in `.env`.
+    // Defaults: Sepolia vUSD / vEUR / CollateralLockHook.
+    IERC20 internal immutable token0;
+    IERC20 internal immutable token1;
+    IHooks internal immutable hookContract;
     /////////////////////////////////////
 
     Currency immutable currency0;
     Currency immutable currency1;
 
     constructor() {
+        token0 = IERC20(vm.envOr("TOKEN0", address(0x5a88a2E133251E2F92734e721b13CA6C60De6f09)));
+        token1 = IERC20(vm.envOr("TOKEN1", address(0xFbc717e1d5536699afD569860B09aC39C6f16862)));
+        hookContract = IHooks(vm.envOr("HOOK_CONTRACT", address(0xc727Bf24715514A5C574A001AaC0d7c0eC7EC200)));
+
         // Make sure artifacts are available, either deploy or configure.
         deployArtifacts();
 
@@ -57,7 +63,7 @@ contract BaseScript is Script, Deployers {
         }
     }
 
-    function getCurrencies() internal pure returns (Currency, Currency) {
+    function getCurrencies() internal view returns (Currency, Currency) {
         require(address(token0) != address(token1));
 
         if (token0 < token1) {

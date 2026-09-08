@@ -125,10 +125,15 @@ forge script script/00_DeployHook.s.sol \
 
 ### Script configuration
 
-Before `01_CreatePoolAndAddLiquidity`, `02_AddLiquidity`, or `03_Swap`, update [`script/base/BaseScript.sol`](script/base/BaseScript.sol):
+Before `01_CreatePoolAndAddLiquidity`, `02_AddLiquidity`, or `03_Swap`, set addresses in `.env` (see [`.env.example`](.env.example)):
 
-1. `token0` / `token1` — Sepolia mock pair (`vUSD`, `vEUR`) or the tokens you want on that network.
-2. `hookContract` — deployed `CollateralLockHook` (must match the pool key).
+```
+TOKEN0=<vUSD or other token0>
+TOKEN1=<vEUR or other token1>
+HOOK_CONTRACT=<CollateralLockHook>
+```
+
+Foundry loads `.env` automatically. If a variable is unset, [`script/base/BaseScript.sol`](script/base/BaseScript.sol) falls back to the Sepolia `vUSD` / `vEUR` / `CollateralLockHook` addresses above. The hook address must match the pool key.
 
 Also set amounts in:
 
