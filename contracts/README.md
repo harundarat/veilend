@@ -1,107 +1,119 @@
-# Uniswap v4 Hook Template
+# Veilend Contracts
 
-**A template for writing Uniswap v4 Hooks 🦄**
+Lending against Uniswap v4 LP positions. A borrower locks a demo-pool position as collateral; a Uniswap v4 hook blocks liquidity decreases while the lock is active; a vault disburses a mock stablecoin after a trusted relayer writes loan terms.
 
-### Get Started
+This repository is based on the official [Uniswap v4 Hook Template](https://github.com/uniswapfoundation/v4-template). The Counter `beforeSwap` / `afterSwap` example is replaced by Veilend’s `CollateralLockHook`, which still uses the template’s `BaseHook`, `HookMiner`, CREATE2 flag mining, Foundry scripts, and test harness.
 
-This template provides a starting point for writing Uniswap v4 Hooks, including a simple example and preconfigured test environment. Start by creating a new repository using the "Use this template" button at the top right of this page. Alternatively you can also click this link:
+## How it works
 
-[![Use this Template](https://img.shields.io/badge/Use%20this%20Template-101010?style=for-the-badge&logo=github)](https://github.com/uniswapfoundation/v4-template/generate)
+Collateral is **only** accepted from the Veilend demo pool. Uniswap v4 hooks are part of `PoolKey`, so `CollateralLockHook` cannot enforce locks on existing v4 pools.
 
-1. The example hook [Counter.sol](src/Counter.sol) demonstrates the `beforeSwap()` and `afterSwap()` hooks
-2. The test template [Counter.t.sol](test/Counter.t.sol) preconfigures the v4 pool manager, test tokens, and test liquidity.
+1. Borrower holds a PositionManager NFT minted on the demo pool (hook address in the pool key).
+2. Borrower `approve`s `LendingVault` on that `positionId`.
+3. `LendingVault.lockPosition(positionId)` records a flag-based lock. The NFT stays in the borrower’s wallet. The vault calls `CollateralLockHook.registerLock(positionId)`.
+4. An off-chain relayer calls `submitCreditReport(...)`. The vault values collateral (relayer `amount0 + amount1` snapshot, otherwise position liquidity 1:1) and transfers `principal = collateralValue * ltvBps / 10000` in the loan token.
+5. While locked, `beforeRemoveLiquidity` reverts `PositionLocked` when `liquidityDelta < 0`. Collect-fee (`liquidityDelta == 0`) is allowed. PositionManager sets `params.salt = bytes32(tokenId)`, so the hook keys locks as `uint256(params.salt)`.
 
-<details>
-<summary>Updating to v4-template:latest</summary>
+`repayLoan`, `liquidate`, and `withdrawSeizedLiquidity` currently revert `NotImplemented`.
 
-This template is actively maintained -- you can update the v4 dependencies, scripts, and helpers:
+## Contracts
 
-```bash
-git remote add template https://github.com/uniswapfoundation/v4-template
-git fetch template
-git merge template/main <BRANCH> --allow-unrelated-histories
-```
+| Contract | Path | Role |
+|---|---|---|
+| `CollateralLockHook` | [`src/CollateralLockHook.sol`](src/CollateralLockHook.sol) | v4 hook. Permissions: `beforeRemoveLiquidity` only. Owner `setVault`; vault `registerLock` / `unlockPosition`. |
+| `ICollateralLockHook` | [`src/interfaces/ICollateralLockHook.sol`](src/interfaces/ICollateralLockHook.sol) | Vault-facing lock API. |
+| `LendingVault` | [`src/LendingVault.sol`](src/LendingVault.sol) | Flag-based loans against demo-pool LP NFTs. Relayer-only credit reports. |
+| `MockERC20` | [`src/mocks/MockERC20.sol`](src/mocks/MockERC20.sol) | Mintable 18-decimal ERC-20 for the demo pair (`vUSD` / `vEUR`) and loan token (`vdUSD`). |
 
-</details>
+Tests: [`test/CollateralLockHook.t.sol`](test/CollateralLockHook.t.sol), [`test/LendingVault.t.sol`](test/LendingVault.t.sol), [`test/VeilendIntegration.t.sol`](test/VeilendIntegration.t.sol).
 
-### Requirements
+## Deployed addresses (Ethereum Sepolia)
 
-This template is designed to work with Foundry (stable). If you are using Foundry Nightly, you may encounter compatibility issues. You can update your Foundry installation to the latest stable version by running:
+From Foundry `broadcast/*/11155111/run-latest.json`. Dry-runs are ignored.
+
+| Contract | Address | Deploy script |
+|---|---|---|
+| MockERC20 `vUSD` (Veilend USD) | [`0x5a88a2E133251E2F92734e721b13CA6C60De6f09`](https://sepolia.etherscan.io/address/0x5a88a2E133251E2F92734e721b13CA6C60De6f09) | [`script/DeployMockTokens.s.sol`](script/DeployMockTokens.s.sol) |
+| MockERC20 `vEUR` (Veilend EUR) | [`0xFbc717e1d5536699afD569860B09aC39C6f16862`](https://sepolia.etherscan.io/address/0xFbc717e1d5536699afD569860B09aC39C6f16862) | [`script/DeployMockTokens.s.sol`](script/DeployMockTokens.s.sol) |
+| MockERC20 `vdUSD` (Veilend Debt USD) | [`0xfe9E69853F0D7488b23CbCA8331E70c351f3bf8e`](https://sepolia.etherscan.io/address/0xfe9E69853F0D7488b23CbCA8331E70c351f3bf8e) | [`script/DeployMockTokens.s.sol`](script/DeployMockTokens.s.sol) |
+| `CollateralLockHook` | [`0xc727Bf24715514A5C574A001AaC0d7c0eC7EC200`](https://sepolia.etherscan.io/address/0xc727Bf24715514A5C574A001AaC0d7c0eC7EC200) | [`script/00_DeployHook.s.sol`](script/00_DeployHook.s.sol) (CREATE2) |
+
+Hook constructor arguments (from the same broadcast, not deployed by this repo):
+
+| | Address |
+|---|---|
+| Uniswap v4 PoolManager (Sepolia) | [`0xE03A1074c86CFeDd5C142C4F04F1a1536e203543`](https://sepolia.etherscan.io/address/0xE03A1074c86CFeDd5C142C4F04F1a1536e203543) |
+| Hook owner / deployer | [`0xB34a4eAECB848d573a0410bc305787d5B69328B8`](https://sepolia.etherscan.io/address/0xB34a4eAECB848d573a0410bc305787d5B69328B8) |
+
+CREATE2 factory used to mine the hook address: [`0x4e59b44847b379578588920cA78FbF26c0B4956C`](https://sepolia.etherscan.io/address/0x4e59b44847b379578588920cA78FbF26c0B4956C). The mined address encodes `BEFORE_REMOVE_LIQUIDITY_FLAG`.
+
+Deploy transactions:
+
+- `vUSD`: [`0x8ef64bd8a284640712cf7eefb22e3f8b196ef75304b5555f7e7d89640c6c7079`](https://sepolia.etherscan.io/tx/0x8ef64bd8a284640712cf7eefb22e3f8b196ef75304b5555f7e7d89640c6c7079)
+- `vEUR`: [`0x2a487ef4e0f3ec194f19d307473613aa4813c26148399eef1d8b7931cc110266`](https://sepolia.etherscan.io/tx/0x2a487ef4e0f3ec194f19d307473613aa4813c26148399eef1d8b7931cc110266)
+- `vdUSD`: [`0xc9255e7eb8fd6276ff24fea394bbddb5d73a3a54e2696622580a59d3800a500d`](https://sepolia.etherscan.io/tx/0xc9255e7eb8fd6276ff24fea394bbddb5d73a3a54e2696622580a59d3800a500d)
+- `CollateralLockHook`: [`0x5f8d7fbdaf45bdaf46387ef66cf3dc2ffb764c027ee9960b448fc6e6ea1088b2`](https://sepolia.etherscan.io/tx/0x5f8d7fbdaf45bdaf46387ef66cf3dc2ffb764c027ee9960b448fc6e6ea1088b2)
+
+## Requirements
+
+Foundry **stable**. Nightly can break compatibility:
 
 ```
 foundryup
 ```
 
-To set up the project, run the following commands in your terminal to install dependencies and run the tests:
+`foundry.toml` uses solc `0.8.30` and EVM Cancun.
 
 ```
 forge install
 forge test
 ```
 
-### Local Development
+## Local development
 
-Other than writing unit tests (recommended!), you can only deploy & test hooks on [anvil](https://book.getfoundry.sh/anvil/) locally. Scripts are available in the `script/` directory, which can be used to deploy hooks, create pools, provide liquidity and swap tokens. The scripts support both local `anvil` environment as well as running them directly on a production network.
+Hooks are deployed and exercised locally on [Anvil](https://book.getfoundry.sh/anvil/). Scripts in `script/` also work against a live RPC.
 
-### Executing locally with using **Anvil**:
-
-1. Start Anvil (or fork a specific chain using anvil):
+### Anvil
 
 ```bash
 anvil
-```
-
-or
-
-```bash
+# or
 anvil --fork-url <YOUR_RPC_URL>
 ```
 
-2. Execute scripts:
-
 ```bash
+forge script script/DeployMockTokens.s.sol \
+    --rpc-url http://localhost:8545 \
+    --private-key <PRIVATE_KEY> \
+    --broadcast
+
 forge script script/00_DeployHook.s.sol \
     --rpc-url http://localhost:8545 \
     --private-key <PRIVATE_KEY> \
     --broadcast
 ```
 
-### Using **RPC URLs** (actual transactions):
+Local Uniswap v4 artifacts (Anvil only): `script/testing/00_DeployV4.s.sol`. Those deployments are **not** picked up automatically unless `test/utils/Deployers.sol` is updated.
 
-:::info
-It is best to not store your private key even in .env or enter it directly in the command line. Instead use the `--account` flag to select your private key from your keystore.
-:::
+### Live RPC (keystore)
 
-### Follow these steps if you have not stored your private key in the keystore:
+Do not put a private key in `.env` or on the command line. Use `--account` with a Foundry keystore.
 
 <details>
-
-1. Add your private key to the keystore:
+<summary>Import a key into the keystore (once)</summary>
 
 ```bash
 cast wallet import <SET_A_NAME_FOR_KEY> --interactive
 ```
-
-2. You will prompted to enter your private key and set a password, fill and press enter:
 
 ```
 Enter private key: <YOUR_PRIVATE_KEY>
 Enter keystore password: <SET_NEW_PASSWORD>
 ```
 
-You should see this:
-
-```
-`<YOUR_WALLET_PRIVATE_KEY_NAME>` keystore was saved successfully. Address: <YOUR_WALLET_ADDRESS>
-```
-
-::: warning
-Use `history -c` to clear your command history.
-:::
+Use `history -c` afterwards to clear shell history.
 
 </details>
-
-1. Execute scripts:
 
 ```bash
 forge script script/00_DeployHook.s.sol \
@@ -111,73 +123,32 @@ forge script script/00_DeployHook.s.sol \
     --broadcast
 ```
 
-You will prompted to enter your wallet password, fill and press enter:
+### Script configuration
 
-```
-Enter keystore password: <YOUR_PASSWORD>
-```
+Before `01_CreatePoolAndAddLiquidity`, `02_AddLiquidity`, or `03_Swap`, update [`script/base/BaseScript.sol`](script/base/BaseScript.sol):
 
-### Key Modifications to note:
+1. `token0` / `token1` — Sepolia mock pair (`vUSD`, `vEUR`) or the tokens you want on that network.
+2. `hookContract` — deployed `CollateralLockHook` (must match the pool key).
 
-1. Update the `token0` and `token1` addresses in the `BaseScript.sol` file to match the tokens you want to use in the network of your choice for sepolia and mainnet deployments.
-2. Update the `token0Amount` and `token1Amount` in the `CreatePoolAndAddLiquidity.s.sol` file to match the amount of tokens you want to provide liquidity with.
-3. Update the `token0Amount` and `token1Amount` in the `AddLiquidity.s.sol` file to match the amount of tokens you want to provide liquidity with.
-4. Update the `amountIn` and `amountOutMin` in the `Swap.s.sol` file to match the amount of tokens you want to swap.
+Also set amounts in:
 
-### Verifying the hook contract
+- [`script/01_CreatePoolAndAddLiquidity.s.sol`](script/01_CreatePoolAndAddLiquidity.s.sol) — `token0Amount`, `token1Amount`
+- [`script/02_AddLiquidity.s.sol`](script/02_AddLiquidity.s.sol) — `token0Amount`, `token1Amount`
+- [`script/03_Swap.s.sol`](script/03_Swap.s.sol) — `amountIn`, `amountOutMin`
+
+### Verifying the hook
 
 ```bash
 forge verify-contract \
   --rpc-url <URL> \
-  --chain <CHAIN_NAME_OR_ID> \
-  # Generally etherscan
-  --verifier <Verification_Provider> \
-  # Use --etherscan-api-key <ETHERSCAN_API_KEY> if you are using etherscan
-  --verifier-api-key <Verification_Provider_API_KEY> \
+  --chain sepolia \
+  --verifier etherscan \
+  --etherscan-api-key <ETHERSCAN_API_KEY> \
   --constructor-args <ABI_ENCODED_ARGS> \
   --num-of-optimizations <OPTIMIZER_RUNS> \
   <Contract_Address> \
-  <path/to/Contract.sol:ContractName>
+  src/CollateralLockHook.sol:CollateralLockHook \
   --watch
 ```
 
-### Troubleshooting
-
-<details>
-
-#### Permission Denied
-
-When installing dependencies with `forge install`, Github may throw a `Permission Denied` error
-
-Typically caused by missing Github SSH keys, and can be resolved by following the steps [here](https://docs.github.com/en/github/authenticating-to-github/connecting-to-github-with-ssh)
-
-Or [adding the keys to your ssh-agent](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/generating-a-new-ssh-key-and-adding-it-to-the-ssh-agent#adding-your-ssh-key-to-the-ssh-agent), if you have already uploaded SSH keys
-
-#### Anvil fork test failures
-
-Some versions of Foundry may limit contract code size to ~25kb, which could prevent local tests to fail. You can resolve this by setting the `code-size-limit` flag
-
-```
-anvil --code-size-limit 40000
-```
-
-#### Hook deployment failures
-
-Hook deployment failures are caused by incorrect flags or incorrect salt mining
-
-1. Verify the flags are in agreement:
-   - `getHookCalls()` returns the correct flags
-   - `flags` provided to `HookMiner.find(...)`
-2. Verify salt mining is correct:
-   - In **forge test**: the _deployer_ for: `new Hook{salt: salt}(...)` and `HookMiner.find(deployer, ...)` are the same. This will be `address(this)`. If using `vm.prank`, the deployer will be the pranking address
-   - In **forge script**: the deployer must be the CREATE2 Proxy: `0x4e59b44847b379578588920cA78FbF26c0B4956C`
-     - If anvil does not have the CREATE2 deployer, your foundry may be out of date. You can update it with `foundryup`
-
-</details>
-
-### Additional Resources
-
-- [Uniswap v4 docs](https://docs.uniswap.org/contracts/v4/overview)
-- [v4-periphery](https://github.com/uniswap/v4-periphery)
-- [v4-core](https://github.com/uniswap/v4-core)
-- [v4-by-example](https://v4-by-example.org)
+Constructor args for the Sepolia hook: PoolManager + owner, ABI-encoded.
