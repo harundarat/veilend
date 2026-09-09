@@ -175,6 +175,67 @@ contract LendingVaultTest is Test {
         vault.submitCreditReport(borrower, POSITION_ID, 5000, 1000, block.timestamp + 1 days);
     }
 
+    function test_submitCreditReport_transfersPrincipalFromLiquidity() public {
+        _approveAndLock();
+
+        uint256 ltvBps = 5000;
+        uint256 expectedPrincipal = uint256(LIQUIDITY) * ltvBps / 10_000;
+        uint256 vaultBefore = mockStable.balanceOf(address(vault));
+        uint256 borrowerBefore = mockStable.balanceOf(borrower);
+        uint256 expiry = block.timestamp + 1 days;
+
+        vm.expectEmit(true, true, false, true, address(vault));
+        emit LendingVault.CreditReportSubmitted(borrower, POSITION_ID, ltvBps, 1000, expiry, expectedPrincipal);
+
+        vm.prank(relayer);
+        vault.submitCreditReport(borrower, POSITION_ID, ltvBps, 1000, expiry);
+
+        assertEq(mockStable.balanceOf(borrower), borrowerBefore + expectedPrincipal);
+        assertEq(mockStable.balanceOf(address(vault)), vaultBefore - expectedPrincipal);
+
+        LendingVault.Loan memory loan = vault.getLoan(POSITION_ID);
+        assertTrue(loan.active);
+        assertEq(loan.principal, expectedPrincipal);
+        assertEq(loan.collateralValue, uint256(LIQUIDITY));
+        assertEq(loan.ltvBps, ltvBps);
+        assertEq(loan.aprBps, 1000);
+        assertEq(loan.expiry, expiry);
+        assertEq(loan.defaultDeadline, expiry + vault.GRACE_PERIOD());
+    }
+
+    function test_submitCreditReport_revertsIfAlreadyActive() public {
+        _approveAndLock();
+
+        vm.prank(relayer);
+        vault.submitCreditReport(borrower, POSITION_ID, 5000, 1000, block.timestamp + 1 days);
+
+        vm.prank(relayer);
+        vm.expectRevert(LendingVault.LoanAlreadyActive.selector);
+        vault.submitCreditReport(borrower, POSITION_ID, 5000, 1000, block.timestamp + 2 days);
+    }
+
+    function test_submitCreditReport_revertsIfExpiryNotFuture() public {
+        _approveAndLock();
+
+        vm.prank(relayer);
+        vm.expectRevert(LendingVault.InvalidExpiry.selector);
+        vault.submitCreditReport(borrower, POSITION_ID, 5000, 1000, block.timestamp);
+    }
+
+    function test_submitCreditReport_revertsIfAprTooHigh() public {
+        _approveAndLock();
+
+        vm.prank(relayer);
+        vm.expectRevert(LendingVault.InvalidApr.selector);
+        vault.submitCreditReport(borrower, POSITION_ID, 5000, 10_001, block.timestamp + 1 days);
+    }
+
+    function test_submitCreditReport_revertsIfNotLocked() public {
+        vm.prank(relayer);
+        vm.expectRevert(LendingVault.LoanNotLocked.selector);
+        vault.submitCreditReport(borrower, POSITION_ID, 5000, 1000, block.timestamp + 1 days);
+    }
+
     function test_constructor_revertsIfHookMismatch() public {
         PoolKey memory mismatched = demoPoolKey;
         mismatched.hooks = IHooks(address(0xBEEF));
