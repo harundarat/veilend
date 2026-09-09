@@ -1,4 +1,32 @@
 {
   "authorizedKeys": [],
-  "secretId": "API_TOKEN"
+  "secretId": "API_TOKEN",
+  "wallets": {
+    "0xB34a4eAECB848d573a0410bc305787d5B69328B8": {
+      "pastLoansCount": 8,
+      "onTimeRepaymentRate": 0.98
+    },
+    "0x1111111111111111111111111111111111111111": {
+      "pastLoansCount": 4,
+      "onTimeRepaymentRate": 0.85
+    },
+    "0x2222222222222222222222222222222222222222": {
+      "pastLoansCount": 5,
+      "onTimeRepaymentRate": 0.6
+    }
+  },
+  "demoPositions": {
+    "1000001": {
+      "liquidity": 1000000,
+      "mintTimestamp": 1000000000
+    },
+    "1000002": {
+      "liquidity": 500000,
+      "mintTimestamp": 1785033600
+    },
+    "1000003": {
+      "liquidity": 100000,
+      "mintTimestamp": 1788921600
+    }
+  }
 }

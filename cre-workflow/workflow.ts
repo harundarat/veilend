@@ -8,6 +8,16 @@ import {
 	type HistoryProfile,
 } from './scoring'
 
+const historyProfileSchema = z.object({
+	pastLoansCount: z.number(),
+	onTimeRepaymentRate: z.number(),
+})
+
+const demoPositionSchema = z.object({
+	liquidity: z.number(),
+	mintTimestamp: z.number(),
+})
+
 export const configSchema = z.object({
 	authorizedKeys: z.array(
 		z.object({
@@ -16,8 +26,32 @@ export const configSchema = z.object({
 		}),
 	),
 	secretId: z.string(),
+	wallets: z.record(historyProfileSchema),
+	demoPositions: z.record(demoPositionSchema),
 })
 export type Config = z.infer<typeof configSchema>
+
+export type LpInputs = {
+	liquidity: number
+	positionAgeDays: number
+	dataSource: 'config' | 'default'
+}
+
+export function resolveLpInputs(config: Config, positionId: string, nowSec: number): LpInputs {
+	const demo = config.demoPositions[positionId]
+	if (demo) {
+		return {
+			liquidity: demo.liquidity,
+			positionAgeDays: (nowSec - demo.mintTimestamp) / 86400,
+			dataSource: 'config',
+		}
+	}
+	return {
+		liquidity: CAP_LIQUIDITY / 2,
+		positionAgeDays: 30,
+		dataSource: 'default',
+	}
+}
 
 export type CreditRequest = {
 	borrower: string
@@ -48,18 +82,20 @@ export const onHttpTrigger = (runtime: TeeRuntime<Config>, payload: HTTPPayload)
 	const request = parseCreditRequest(payload)
 	runtime.getSecret({ id: runtime.config.secretId }).result().value
 
-	const wallets: Record<string, HistoryProfile> = {}
-	const history = lookupHistory(request.borrower, wallets)
+	const history = lookupHistory(request.borrower, runtime.config.wallets as Record<string, HistoryProfile>)
 	const nowSec = Math.floor(runtime.now().getTime() / 1000)
+	const lp = resolveLpInputs(runtime.config, request.positionId, nowSec)
 	const terms = scoreToTerms({
-		liquidity: CAP_LIQUIDITY / 2,
-		positionAgeDays: 30,
+		liquidity: lp.liquidity,
+		positionAgeDays: lp.positionAgeDays,
 		pastLoansCount: history.pastLoansCount,
 		onTimeRepaymentRate: history.onTimeRepaymentRate,
 		nowSec,
 	})
 
-	runtime.log(`terms computed ltvBps=${terms.ltvBps} aprBps=${terms.aprBps} expiry=${terms.expiry}`)
+	runtime.log(
+		`terms computed ltvBps=${terms.ltvBps} aprBps=${terms.aprBps} expiry=${terms.expiry} dataSource=${lp.dataSource}`,
+	)
 	return terms
 }
 
