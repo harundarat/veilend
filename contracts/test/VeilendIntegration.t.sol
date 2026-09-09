@@ -233,6 +233,47 @@ contract VeilendIntegrationTest is BaseTest {
         assertEq(IERC721(address(positionManager)).ownerOf(tokenId), address(this));
     }
 
+    function test_liquidate_thenWithdrawSeizedLiquidity() public {
+        _approveAndLock();
+
+        uint256 ltvBps = 5000;
+        uint256 aprBps = 1000;
+        uint256 expiry = block.timestamp + 1 days;
+
+        vm.prank(relayer);
+        vault.submitCreditReport(address(this), tokenId, ltvBps, aprBps, expiry);
+
+        address liquidator = makeAddr("liquidator");
+        vm.warp(expiry + vault.GRACE_PERIOD() + 1);
+
+        vm.expectEmit(true, true, true, true, address(vault));
+        emit LendingVault.LoanLiquidated(tokenId, liquidator, address(this));
+
+        vm.prank(liquidator);
+        vault.liquidate(tokenId);
+
+        IERC721 nft = IERC721(address(positionManager));
+        assertEq(nft.ownerOf(tokenId), address(vault));
+        assertFalse(hook.isLocked(tokenId));
+        assertTrue(vault.getLoan(tokenId).liquidated);
+
+        uint256 amount0Before = currency0.balanceOf(address(vault));
+        uint256 amount1Before = currency1.balanceOf(address(vault));
+
+        vault.withdrawSeizedLiquidity(tokenId);
+
+        uint256 amount0 = currency0.balanceOf(address(vault)) - amount0Before;
+        uint256 amount1 = currency1.balanceOf(address(vault)) - amount1Before;
+        assertGt(amount0 + amount1, 0);
+        assertEq(positionManager.getPositionLiquidity(tokenId), 0);
+
+        vm.expectRevert();
+        nft.ownerOf(tokenId);
+
+        vm.expectRevert(LendingVault.NotSeized.selector);
+        vault.withdrawSeizedLiquidity(tokenId);
+    }
+
     function test_repayLoan_unlocksAndAllowsDecrease() public {
         _approveAndLock();
 

@@ -29,6 +29,16 @@ contract MockPositionManager {
         isApprovedForAll[msg.sender][operator] = approved;
     }
 
+    function transferFrom(address from, address to, uint256 tokenId) external {
+        require(ownerOf[tokenId] == from, "not owner");
+        require(
+            msg.sender == from || getApproved[tokenId] == msg.sender || isApprovedForAll[from][msg.sender],
+            "not approved"
+        );
+        ownerOf[tokenId] = to;
+        getApproved[tokenId] = address(0);
+    }
+
     function setPosition(uint256 tokenId, address owner, PoolKey memory key, uint128 liquidity) external {
         ownerOf[tokenId] = owner;
         _poolKeys[tokenId] = key;
@@ -362,7 +372,7 @@ contract LendingVaultTest is Test {
 
         _fundAndApproveRepay(repayAmount);
         vm.prank(borrower);
-        vm.expectRevert(LendingVault.LoanNotActive.selector);
+        vm.expectRevert(LendingVault.AlreadyRepaid.selector);
         vault.repayLoan(POSITION_ID);
     }
 
@@ -406,13 +416,83 @@ contract LendingVaultTest is Test {
         vault.repayLoan(POSITION_ID);
     }
 
-    function test_liquidate_revertsNotImplemented() public {
-        vm.expectRevert(LendingVault.NotImplemented.selector);
+    function test_repayLoan_revertsAfterLiquidate() public {
+        (uint256 principal, uint256 expiry, uint256 aprBps) = _lockAndReport();
+        uint256 repayAmount = _repayAmount(principal, aprBps);
+
+        vm.warp(expiry + vault.GRACE_PERIOD() + 1);
+        vm.prank(attacker);
+        vault.liquidate(POSITION_ID);
+
+        _fundAndApproveRepay(repayAmount);
+        vm.prank(borrower);
+        vm.expectRevert(LendingVault.AlreadyLiquidated.selector);
+        vault.repayLoan(POSITION_ID);
+    }
+
+    function test_liquidate_afterDeadline_seizesNft() public {
+        (, uint256 expiry,) = _lockAndReport();
+
+        vm.warp(expiry + vault.GRACE_PERIOD() + 1);
+
+        vm.expectEmit(true, true, true, true, address(vault));
+        emit LendingVault.LoanLiquidated(POSITION_ID, attacker, borrower);
+
+        vm.prank(attacker);
+        vault.liquidate(POSITION_ID);
+
+        assertEq(positionManager.ownerOf(POSITION_ID), address(vault));
+        assertFalse(hook.isLocked(POSITION_ID));
+        assertFalse(vault.locked(POSITION_ID));
+
+        LendingVault.Loan memory loan = vault.getLoan(POSITION_ID);
+        assertTrue(loan.liquidated);
+        assertFalse(loan.active);
+        assertFalse(loan.repaid);
+        assertFalse(loan.locked);
+    }
+
+    function test_liquidate_beforeDeadline_reverts() public {
+        _lockAndReport();
+
+        vm.prank(attacker);
+        vm.expectRevert(LendingVault.DeadlineNotPassed.selector);
         vault.liquidate(POSITION_ID);
     }
 
-    function test_withdrawSeizedLiquidity_revertsNotImplemented() public {
-        vm.expectRevert(LendingVault.NotImplemented.selector);
+    function test_liquidate_onDefaultDeadline_reverts() public {
+        (, uint256 expiry,) = _lockAndReport();
+        vm.warp(expiry + vault.GRACE_PERIOD());
+
+        vm.prank(attacker);
+        vm.expectRevert(LendingVault.DeadlineNotPassed.selector);
+        vault.liquidate(POSITION_ID);
+    }
+
+    function test_liquidate_withoutNftApproval_reverts() public {
+        (, uint256 expiry,) = _lockAndReport();
+
+        vm.prank(borrower);
+        positionManager.approve(address(0), POSITION_ID);
+
+        vm.warp(expiry + vault.GRACE_PERIOD() + 1);
+        vm.prank(attacker);
+        vm.expectRevert(LendingVault.SeizeFailed.selector);
+        vault.liquidate(POSITION_ID);
+
+        assertEq(positionManager.ownerOf(POSITION_ID), borrower);
+        assertFalse(vault.getLoan(POSITION_ID).liquidated);
+    }
+
+    function test_liquidate_revertsIfNotActive() public {
+        vm.prank(attacker);
+        vm.expectRevert(LendingVault.LoanNotActive.selector);
+        vault.liquidate(POSITION_ID);
+    }
+
+    function test_withdrawSeizedLiquidity_revertsIfNotLiquidated() public {
+        _lockAndReport();
+        vm.expectRevert(LendingVault.NotSeized.selector);
         vault.withdrawSeizedLiquidity(POSITION_ID);
     }
 }
