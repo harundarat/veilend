@@ -37,6 +37,7 @@ From Foundry `broadcast/*/11155111/run-latest.json`. Dry-runs are ignored.
 | MockERC20 `vEUR` (Veilend EUR) | [`0xFbc717e1d5536699afD569860B09aC39C6f16862`](https://sepolia.etherscan.io/address/0xFbc717e1d5536699afD569860B09aC39C6f16862) | [`script/DeployMockTokens.s.sol`](script/DeployMockTokens.s.sol) |
 | MockERC20 `vdUSD` (Veilend Debt USD) | [`0xfe9E69853F0D7488b23CbCA8331E70c351f3bf8e`](https://sepolia.etherscan.io/address/0xfe9E69853F0D7488b23CbCA8331E70c351f3bf8e) | [`script/DeployMockTokens.s.sol`](script/DeployMockTokens.s.sol) |
 | `CollateralLockHook` | [`0xc727Bf24715514A5C574A001AaC0d7c0eC7EC200`](https://sepolia.etherscan.io/address/0xc727Bf24715514A5C574A001AaC0d7c0eC7EC200) | [`script/00_DeployHook.s.sol`](script/00_DeployHook.s.sol) (CREATE2) |
+| `LendingVault` | [`0x359E7aCd51042ede88A4c01c4ADeE49d2481b65D`](https://sepolia.etherscan.io/address/0x359E7aCd51042ede88A4c01c4ADeE49d2481b65D) | [`script/04_DeployVault.s.sol`](script/04_DeployVault.s.sol) (`REPLACE_VAULT=true`) |
 
 Related addresses (not deployed by this repo):
 
@@ -54,6 +55,7 @@ Deploy transactions:
 - `vEUR`: [`0x2a487ef4e0f3ec194f19d307473613aa4813c26148399eef1d8b7931cc110266`](https://sepolia.etherscan.io/tx/0x2a487ef4e0f3ec194f19d307473613aa4813c26148399eef1d8b7931cc110266)
 - `vdUSD`: [`0xc9255e7eb8fd6276ff24fea394bbddb5d73a3a54e2696622580a59d3800a500d`](https://sepolia.etherscan.io/tx/0xc9255e7eb8fd6276ff24fea394bbddb5d73a3a54e2696622580a59d3800a500d)
 - `CollateralLockHook`: [`0x5f8d7fbdaf45bdaf46387ef66cf3dc2ffb764c027ee9960b448fc6e6ea1088b2`](https://sepolia.etherscan.io/tx/0x5f8d7fbdaf45bdaf46387ef66cf3dc2ffb764c027ee9960b448fc6e6ea1088b2)
+- `LendingVault`: [`0x9876ad424851712e3924d25f88bf04d8214825cc07738bd26b8a8beec6259472`](https://sepolia.etherscan.io/tx/0x9876ad424851712e3924d25f88bf04d8214825cc07738bd26b8a8beec6259472) (`setVault`: [`0xa09ea18fff6de061e517553ce9021cfcd09eb1997d2abfdd6a02c3455288d0ef`](https://sepolia.etherscan.io/tx/0xa09ea18fff6de061e517553ce9021cfcd09eb1997d2abfdd6a02c3455288d0ef); `vdUSD` prefund: [`0xe1b0739f1c99a2b8e89fe14e2acad56fed7d58974b8c1ac110fe7b8185ef5cbf`](https://sepolia.etherscan.io/tx/0xe1b0739f1c99a2b8e89fe14e2acad56fed7d58974b8c1ac110fe7b8185ef5cbf))
 
 ### Demo pool (vUSD / vEUR)
 

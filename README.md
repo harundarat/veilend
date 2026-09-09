@@ -129,12 +129,12 @@ Fork e2e (real NFT `39014`): `ltvBps=5500 aprBps=800 dataSource=onchain` — [`d
 
 ## Sepolia addresses
 
-Contracts below were broadcast to Ethereum Sepolia. The lock → CRE → disburse walkthrough in `docs/e2e-lock-disburse/` ran against an **Anvil fork** of that state (no extra testnet broadcast for the report).
+Contracts below were broadcast to Ethereum Sepolia. `LendingVault` below replaced `0xFf1E171F9A4484D6cb034d68557d30C03934BFc9` (`hook.setVault` with `REPLACE_VAULT=true`). The lock → CRE → disburse walkthrough in `docs/e2e-lock-disburse/` ran against an **Anvil fork** of this vault (no extra testnet broadcast for the report).
 
 | | Address |
 |---|---|
 | `CollateralLockHook` | [`0xc727Bf24715514A5C574A001AaC0d7c0eC7EC200`](https://sepolia.etherscan.io/address/0xc727Bf24715514A5C574A001AaC0d7c0eC7EC200) |
-| `LendingVault` | [`0xFf1E171F9A4484D6cb034d68557d30C03934BFc9`](https://sepolia.etherscan.io/address/0xFf1E171F9A4484D6cb034d68557d30C03934BFc9) |
+| `LendingVault` | [`0x359E7aCd51042ede88A4c01c4ADeE49d2481b65D`](https://sepolia.etherscan.io/address/0x359E7aCd51042ede88A4c01c4ADeE49d2481b65D) |
 | Mock `vUSD` | [`0x5a88a2E133251E2F92734e721b13CA6C60De6f09`](https://sepolia.etherscan.io/address/0x5a88a2E133251E2F92734e721b13CA6C60De6f09) |
 | Mock `vEUR` | [`0xFbc717e1d5536699afD569860B09aC39C6f16862`](https://sepolia.etherscan.io/address/0xFbc717e1d5536699afD569860B09aC39C6f16862) |
 | Mock `vdUSD` (loan token) | [`0xfe9E69853F0D7488b23CbCA8331E70c351f3bf8e`](https://sepolia.etherscan.io/address/0xfe9E69853F0D7488b23CbCA8331E70c351f3bf8e) |

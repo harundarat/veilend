@@ -1,18 +1,18 @@
 relayer starting {
-  vault: "0xFf1E171F9A4484D6cb034d68557d30C03934BFc9",
+  vault: "0x359E7aCd51042ede88A4c01c4ADeE49d2481b65D",
   relayer: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
   rpc: "http://127.0.0.1:8545",
   once: true,
-  fromBlock: "11665623",
+  fromBlock: "11668149",
   ws: false,
   termsFile: undefined,
 }
 PositionLocked {
   borrower: "0xB34a4eAECB848d573a0410bc305787d5B69328B8",
   positionId: "39014",
-  timestamp: "1788928100",
-  tx: "0x66170d881f220a7fe2c816ebf10c4b55b8015e6fcec85277204284841fc8f951",
-  block: "11665623",
+  timestamp: "1788959440",
+  tx: "0x502dcdb4e41ce84ec990926136b0c04bdb6a82a9f46fdf973451194d1548a655",
+  block: "11668149",
 }
 cre workflow simulate finished {
   exitCode: 0,
@@ -25,9 +25,9 @@ cre workflow simulate finished {
   Config hash: 085edfc3bfbd08da0598790f8e4f3c38239c17fbb5235a9d5c0c712a1ac544cf
 ✓ Parsed JSON input successfully
 ✓ Created HTTP trigger payload with 2 fields
-2026-09-09T11:29:01Z [SIMULATION] Simulator Initialized
+2026-09-09T20:12:03Z [SIMULATION] Simulator Initialized
 
-2026-09-09T11:29:01Z [SIMULATION] Running trigger trigger=http-trigger@1.0.0-alpha
+2026-09-09T20:12:03Z [SIMULATION] Running trigger trigger=http-trigger@1.0.0-alpha
 ╭────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ Trigger requested TEE Execution your trigger will run in one of the following Tees:                │
 │     - AWS Nitro in us-west-2                                                                       │
@@ -38,17 +38,17 @@ cre workflow simulate finished {
 │                                                                                                    │
 ╰────────────────────────────────────────────────────────────────────────────────────────────────────╯
 
-2026-09-09T11:29:02Z [USER LOG] terms computed ltvBps=5500 aprBps=800 expiry=1788931741 dataSource=onchain
+2026-09-09T20:12:04Z [USER LOG] terms computed ltvBps=5500 aprBps=800 expiry=1788963123 dataSource=onchain
 
 ✓ Workflow Simulation Result:
 {
   "aprBps": 800,
-  "expiry": 1788931741,
+  "expiry": 1788963123,
   "ltvBps": 5500
 }
 
-2026-09-09T11:29:02Z [SIMULATION] Execution finished signal received
-2026-09-09T11:29:02Z [SIMULATION] Skipping WorkflowEngineV2
+2026-09-09T20:12:04Z [SIMULATION] Execution finished signal received
+2026-09-09T20:12:04Z [SIMULATION] Skipping WorkflowEngineV2
 
 ╭──────────────────────────────────────────────────────╮
 │ Simulation complete! Ready to deploy your workflow?  │
@@ -63,12 +63,12 @@ Compiling workflow...
 parsed terms {
   ltvBps: "5500",
   aprBps: "800",
-  expiry: "1788931741",
+  expiry: "1788963123",
 }
 submitCreditReport {
-  tx: "0x10de9474c6424bfbeb58eb849d096f90ea2949445a943bd3ed46e192ad7e25ef",
+  tx: "0xdc1d91b81839c434be054d8a462a1de916b494ad8d4ab155ebd0c36d1cf5eb5d",
   ltvBps: "5500",
   aprBps: "800",
-  expiry: "1788931741",
+  expiry: "1788963123",
   principal: "61480752649840024077",
 }

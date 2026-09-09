@@ -18,7 +18,7 @@ Paths already in the repo. Not a CRE or Uniswap tutorial.
 
 ## Lock → disburse (Anvil fork of Sepolia)
 
-No extra Sepolia broadcast. Vault `0xFf1E171F9A4484D6cb034d68557d30C03934BFc9`, NFT `39014`. Relayer spawned `cre workflow simulate`; terms `ltvBps=5500 aprBps=800 dataSource=onchain`; `vdUSD` left the vault.
+No extra Sepolia broadcast. Vault `0x359E7aCd51042ede88A4c01c4ADeE49d2481b65D`, NFT `39014` (custodied by the vault after `lockPosition`). Relayer spawned `cre workflow simulate`; terms `ltvBps=5500 aprBps=800 dataSource=onchain`; `vdUSD` left the vault.
 
 | File | What it is |
 |---|---|
