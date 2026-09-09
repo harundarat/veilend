@@ -36,6 +36,8 @@ contract LendingVault {
         uint256 principal;
         bool active;
         bool locked;
+        bool repaid;
+        bool liquidated;
     }
 
     mapping(uint256 => Loan) public loans;
@@ -50,17 +52,23 @@ contract LendingVault {
         uint256 principal
     );
     event RelayerUpdated(address indexed relayer);
+    event LoanRepaid(address indexed borrower, uint256 indexed positionId, uint256 repayAmount);
 
     error NotRelayer();
     error NotOwner();
     error NotPositionOwner();
+    error NotBorrower();
     error ApprovalRequired();
     error NotDemoPool();
     error InvalidHook();
     error ZeroLiquidity();
     error AlreadyLocked();
     error LoanNotLocked();
+    error LoanNotActive();
     error LoanAlreadyActive();
+    error AlreadyRepaid();
+    error AlreadyLiquidated();
+    error PastDeadline();
     error InvalidLtv();
     error InvalidApr();
     error InvalidExpiry();
@@ -129,7 +137,9 @@ contract LendingVault {
             collateralValue: 0,
             principal: 0,
             active: false,
-            locked: true
+            locked: true,
+            repaid: false,
+            liquidated: false
         });
 
         hook.registerLock(positionId);
@@ -165,8 +175,23 @@ contract LendingVault {
         _submitCreditReport(borrower, positionId, ltvBps, aprBps, expiry, amount0Snapshot, amount1Snapshot);
     }
 
-    function repayLoan(uint256) external pure {
-        revert NotImplemented();
+    function repayLoan(uint256 positionId) external {
+        Loan storage loan = loans[positionId];
+        if (msg.sender != loan.borrower) revert NotBorrower();
+        if (!loan.active || loan.principal == 0) revert LoanNotActive();
+        if (loan.repaid) revert AlreadyRepaid();
+        if (loan.liquidated) revert AlreadyLiquidated();
+        if (block.timestamp > loan.defaultDeadline) revert PastDeadline();
+
+        uint256 repayAmount = loan.principal + (loan.principal * loan.aprBps / BPS_DENOMINATOR);
+        if (!loanToken.transferFrom(msg.sender, address(this), repayAmount)) revert InsufficientLiquidity();
+
+        loan.active = false;
+        loan.locked = false;
+        loan.repaid = true;
+
+        hook.unlockPosition(positionId);
+        emit LoanRepaid(msg.sender, positionId, repayAmount);
     }
 
     function liquidate(uint256) external pure {

@@ -53,6 +53,8 @@ export const lendingVaultAbi = [
           { name: "principal", type: "uint256" },
           { name: "active", type: "bool" },
           { name: "locked", type: "bool" },
+          { name: "repaid", type: "bool" },
+          { name: "liquidated", type: "bool" },
         ],
       },
     ],
