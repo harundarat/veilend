@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "skills": {
+    "chainlink-ace-skill": {
+      "source": "smartcontractkit/chainlink-agent-skills",
+      "sourceType": "github",
+      "skillPath": "chainlink-ace-skill/SKILL.md",
+      "computedHash": "5fe6ab8aea060738d3d0d2a5c2b468fe46b6e4cb88d7a5d57f63e5358368404c"
+    },
+    "chainlink-ccip-skill": {
+      "source": "smartcontractkit/chainlink-agent-skills",
+      "sourceType": "github",
+      "skillPath": "chainlink-ccip-skill/SKILL.md",
+      "computedHash": "0487d3185d8aecb6fc3b43cd08439226a8d42299683e111508d4dbe95cbd751b"
+    },
+    "chainlink-confidential-ai-attester-skill": {
+      "source": "smartcontractkit/chainlink-agent-skills",
+      "sourceType": "github",
+      "skillPath": "chainlink-confidential-ai-attester-skill/SKILL.md",
+      "computedHash": "1ef93469819bfd5a05d67a37931e2ece97e23df76a547fce0a1ba231f5009ea3"
+    },
+    "chainlink-cre-skill": {
+      "source": "smartcontractkit/chainlink-agent-skills",
+      "sourceType": "github",
+      "skillPath": "chainlink-cre-skill/SKILL.md",
+      "computedHash": "1415af4c96e0ba18af13ec91a1765b09e50e6b3a957c92e3cbeaf385c0d2b2ff"
+    },
+    "chainlink-data-feeds-skill": {
+      "source": "smartcontractkit/chainlink-agent-skills",
+      "sourceType": "github",
+      "skillPath": "chainlink-data-feeds-skill/SKILL.md",
+      "computedHash": "da4d08df46366c502d072995fda44d8c4933f28000296f59871a351fc038c0e6"
+    },
+    "chainlink-data-streams-skill": {
+      "source": "smartcontractkit/chainlink-agent-skills",
+      "sourceType": "github",
+      "skillPath": "chainlink-data-streams-skill/SKILL.md",
+      "computedHash": "6663b68c2141c2aae42465aacef3f0cfde7baa3b8040af84c2c4a9279126405c"
+    },
+    "chainlink-vrf-skill": {
+      "source": "smartcontractkit/chainlink-agent-skills",
+      "sourceType": "github",
+      "skillPath": "chainlink-vrf-skill/SKILL.md",
+      "computedHash": "ae7b904701d4f11711ae9dc0b92bb89822ff3d3c415fb5bf9dbfd81d28bbb140"
+    }
+  }
+}
