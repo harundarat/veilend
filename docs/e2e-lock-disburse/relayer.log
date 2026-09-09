@@ -1,0 +1,74 @@
+relayer starting {
+  vault: "0xFf1E171F9A4484D6cb034d68557d30C03934BFc9",
+  relayer: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+  rpc: "http://127.0.0.1:8545",
+  once: true,
+  fromBlock: "11665623",
+  ws: false,
+  termsFile: undefined,
+}
+PositionLocked {
+  borrower: "0xB34a4eAECB848d573a0410bc305787d5B69328B8",
+  positionId: "39014",
+  timestamp: "1788928100",
+  tx: "0x66170d881f220a7fe2c816ebf10c4b55b8015e6fcec85277204284841fc8f951",
+  block: "11665623",
+}
+cre workflow simulate finished {
+  exitCode: 0,
+  command: "/home/harundarat/.cre/bin/cre workflow simulate credit-scoring-workflow --target staging-settings --non-interactive --trigger-index 0 --http-payload {\"borrower\":\"0xB34a4eAECB848d573a0410bc305787d5B69328B8\",\"positionId\":\"39014\"}",
+}
+✓ Workflow compiled
+✓ Simulation limits enabled
+  HTTP: req=120kb resp=250kb timeout=10s | ConfHTTP: req=125kb resp=500kb timeout=1m30s | Consensus obs=25kb | ChainWrite evm_report=50kb evm_gas=10000000 solana_report=265b solana_cu=300000 | WASM binary=100mb compressed=20mb
+  Binary hash: 5b868f717237e8147b6e1b9aa7fae8576ff838bead7e8311dac57b7f6d3070c3
+  Config hash: 085edfc3bfbd08da0598790f8e4f3c38239c17fbb5235a9d5c0c712a1ac544cf
+✓ Parsed JSON input successfully
+✓ Created HTTP trigger payload with 2 fields
+2026-09-09T11:29:01Z [SIMULATION] Simulator Initialized
+
+2026-09-09T11:29:01Z [SIMULATION] Running trigger trigger=http-trigger@1.0.0-alpha
+╭────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ Trigger requested TEE Execution your trigger will run in one of the following Tees:                │
+│     - AWS Nitro in us-west-2                                                                       │
+│ The simulator is not a real TEE, and is meant to debug.                                            │
+│ Do not use it for sensitive information.                                                           │
+│ During real execution, user logs for this trigger will not be visible, and will not leave the TEE. │
+│ They are presented in the simulator for debugging only.                                            │
+│                                                                                                    │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+2026-09-09T11:29:02Z [USER LOG] terms computed ltvBps=5500 aprBps=800 expiry=1788931741 dataSource=onchain
+
+✓ Workflow Simulation Result:
+{
+  "aprBps": 800,
+  "expiry": 1788931741,
+  "ltvBps": 5500
+}
+
+2026-09-09T11:29:02Z [SIMULATION] Execution finished signal received
+2026-09-09T11:29:02Z [SIMULATION] Skipping WorkflowEngineV2
+
+╭──────────────────────────────────────────────────────╮
+│ Simulation complete! Ready to deploy your workflow?  │
+│                                                      │
+│ Run cre account access to request deployment access. │
+╰──────────────────────────────────────────────────────╯
+Initializing...
+Loading settings...
+! Using default private key for chain write simulation. To use your own key, set CRE_ETH_PRIVATE_KEY in your .env file or system environment.
+Checking RPC connectivity...
+Compiling workflow...
+parsed terms {
+  ltvBps: "5500",
+  aprBps: "800",
+  expiry: "1788931741",
+}
+submitCreditReport {
+  tx: "0x10de9474c6424bfbeb58eb849d096f90ea2949445a943bd3ed46e192ad7e25ef",
+  ltvBps: "5500",
+  aprBps: "800",
+  expiry: "1788931741",
+  principal: "61480752649840024077",
+}
