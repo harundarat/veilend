@@ -12,8 +12,9 @@ import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
 import {ICollateralLockHook} from "./interfaces/ICollateralLockHook.sol";
 
 /// @title LendingVault
-/// @notice Flag-based lending against Veilend demo-pool Uniswap v4 LP positions.
-/// @dev NFT stays with the borrower so a later liquidate can transferFrom using lock-time approval.
+/// @notice Lending against Veilend demo-pool Uniswap v4 LP positions.
+/// @dev `lockPosition` pulls the PositionManager NFT into the vault. `loan.borrower` stays the
+///      original caller; `ownerOf` is the vault until repay returns the NFT or liquidate burns it.
 ///      Only the demo pool is accepted because the lock hook is part of that PoolKey.
 contract LendingVault {
     IPositionManager public immutable positionManager;
@@ -75,6 +76,7 @@ contract LendingVault {
     error PastDeadline();
     error DeadlineNotPassed();
     error SeizeFailed();
+    error NftTransferFailed();
     error NotSeized();
     error InvalidLtv();
     error InvalidApr();
@@ -118,7 +120,7 @@ contract LendingVault {
         return loans[positionId].locked;
     }
 
-    /// @notice Lock a demo-pool LP position as collateral. NFT is not transferred.
+    /// @notice Lock a demo-pool LP position as collateral. Pulls the NFT into the vault.
     function lockPosition(uint256 positionId) public {
         IERC721 nft = IERC721(address(positionManager));
 
@@ -132,6 +134,12 @@ contract LendingVault {
 
         if (positionManager.getPositionLiquidity(positionId) == 0) revert ZeroLiquidity();
         if (loans[positionId].locked) revert AlreadyLocked();
+
+        try nft.transferFrom(msg.sender, address(this), positionId) {}
+        catch {
+            revert NftTransferFailed();
+        }
+        if (nft.ownerOf(positionId) != address(this)) revert NftTransferFailed();
 
         loans[positionId] = Loan({
             borrower: msg.sender,
