@@ -6,17 +6,6 @@ export function eventKey(event: PositionLockedEvent): string {
   return event.positionId.toString()
 }
 
-export function committedCursor(pending: Iterable<PositionLockedEvent>, head: bigint): bigint {
-  let minBlock: bigint | undefined
-  for (const event of pending) {
-    if (minBlock === undefined || event.blockNumber < minBlock) {
-      minBlock = event.blockNumber
-    }
-  }
-  if (minBlock === undefined) return head
-  return minBlock === 0n ? 0n : minBlock - 1n
-}
-
 export class PendingQueue {
   private readonly pending = new Map<string, PositionLockedEvent>()
   private readonly seen = new Set<string>()
@@ -37,10 +26,6 @@ export class PendingQueue {
     if (this.seen.has(key)) return
     this.pending.set(key, event)
     if (this.draining) this.rerun = true
-  }
-
-  cursor(head: bigint): bigint {
-    return committedCursor(this.pending.values(), head)
   }
 
   async drain(handler: (event: PositionLockedEvent) => Promise<HandleOutcome>): Promise<number> {

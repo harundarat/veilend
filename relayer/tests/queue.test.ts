@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { committedCursor, PendingQueue, type HandleOutcome } from "../src/queue"
+import { PendingQueue, type HandleOutcome } from "../src/queue"
 import type { PositionLockedEvent } from "../src/watch"
 
 function event(positionId: bigint, blockNumber: bigint): PositionLockedEvent {
@@ -13,31 +13,20 @@ function event(positionId: bigint, blockNumber: bigint): PositionLockedEvent {
   }
 }
 
-describe("committedCursor", () => {
-  test("returns head when nothing is pending", () => {
-    expect(committedCursor([], 50n)).toBe(50n)
-  })
-
-  test("does not advance past the earliest unprocessed block", () => {
-    expect(committedCursor([event(1n, 40n), event(2n, 45n)], 50n)).toBe(39n)
-  })
-})
-
 describe("PendingQueue", () => {
-  test("keeps failed events pending and leaves cursor on that block", async () => {
+  test("keeps failed events pending", async () => {
     const queue = new PendingQueue()
     queue.enqueue(event(7n, 100n))
     const remaining = await queue.drain(async () => "retry")
     expect(remaining).toBe(1)
-    expect(queue.cursor(110n)).toBe(99n)
+    expect(queue.size).toBe(1)
   })
 
-  test("marks successful events seen and advances cursor to head", async () => {
+  test("marks successful events seen", async () => {
     const queue = new PendingQueue()
     queue.enqueue(event(7n, 100n))
     const remaining = await queue.drain(async () => "done")
     expect(remaining).toBe(0)
-    expect(queue.cursor(110n)).toBe(110n)
     queue.enqueue(event(7n, 101n))
     expect(queue.size).toBe(0)
   })

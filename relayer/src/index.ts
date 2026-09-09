@@ -135,13 +135,38 @@ async function enqueueRange(ctx: RelayerContext, fromBlock: bigint, toBlock: big
 async function pollTick(
   ctx: RelayerContext,
   cursor: bigint,
-): Promise<{ remaining: number; cursor: bigint }> {
-  const head = await ctx.publicClient.getBlockNumber()
-  if (head > cursor) {
-    await enqueueRange(ctx, cursor + 1n, head)
+): Promise<{ remaining: number; cursor: bigint; scanFailed: boolean }> {
+  let nextCursor = cursor
+  let scanFailed = false
+  try {
+    const head = await ctx.publicClient.getBlockNumber()
+    if (head > cursor) {
+      await enqueueRange(ctx, cursor + 1n, head)
+    }
+    nextCursor = head > cursor ? head : cursor
+  } catch (error) {
+    scanFailed = true
+    const message = error instanceof Error ? error.message : String(error)
+    console.error("getLogs poll failed; retrying from cursor", {
+      cursor: cursor.toString(),
+      error: message,
+    })
   }
   const remaining = await ctx.queue.drain((event) => handlePositionLocked(event, ctx))
-  return { remaining, cursor: ctx.queue.cursor(head) }
+  return { remaining, cursor: nextCursor, scanFailed }
+}
+
+async function drainUntilCaughtUp(ctx: RelayerContext, cursor: bigint): Promise<number> {
+  for (;;) {
+    const tick = await pollTick(ctx, cursor)
+    cursor = tick.cursor
+    if (tick.remaining > 0) return tick.remaining
+    if (tick.scanFailed) {
+      throw new Error("getLogs poll failed")
+    }
+    const head = await ctx.publicClient.getBlockNumber()
+    if (head <= cursor) return 0
+  }
 }
 
 function startWatch(ctx: RelayerContext): () => void {
@@ -149,9 +174,15 @@ function startWatch(ctx: RelayerContext): () => void {
     address: ctx.config.vaultAddress,
     abi: lendingVaultAbi,
     eventName: "PositionLocked",
+    strict: true,
     onLogs: (logs) => {
       for (const item of logs) {
-        ctx.queue.enqueue(toPositionLockedEvent(item))
+        const event = toPositionLockedEvent(item)
+        if (event === undefined) {
+          console.error("dropping incomplete PositionLocked log")
+          continue
+        }
+        ctx.queue.enqueue(event)
       }
       void ctx.queue.drain((event) => handlePositionLocked(event, ctx)).then((remaining) => {
         if (remaining > 0) {
@@ -190,6 +221,8 @@ async function main(): Promise<void> {
   }
   const latest = await publicClient.getBlockNumber()
   const fromBlock = args.fromBlock ?? latest
+  // Last block whose logs were fetched. Pending retries do not pin this cursor.
+  let cursor = fromBlock - 1n
 
   log("relayer starting", {
     vault: config.vaultAddress,
@@ -207,21 +240,17 @@ async function main(): Promise<void> {
     log("watching PositionLocked via WebSocket; getLogs poll is the backstop")
   }
 
-  const backfillTo = await publicClient.getBlockNumber()
-  await enqueueRange(ctx, fromBlock, backfillTo)
-  let remaining = await ctx.queue.drain((event) => handlePositionLocked(event, ctx))
-  let cursor = ctx.queue.cursor(backfillTo)
-
-  const caughtUp = await pollTick(ctx, cursor)
-  remaining = caughtUp.remaining
-  cursor = caughtUp.cursor
-
   if (args.once) {
+    const remaining = await drainUntilCaughtUp(ctx, cursor)
     if (remaining > 0) {
       throw new Error(`unprocessed PositionLocked: ${remaining}`)
     }
     return
   }
+
+  const caughtUp = await pollTick(ctx, cursor)
+  let remaining = caughtUp.remaining
+  cursor = caughtUp.cursor
 
   log("polling PositionLocked", { intervalMs: config.pollIntervalMs, cursor: cursor.toString() })
   try {
@@ -247,8 +276,10 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((error) => {
-  const message = error instanceof Error ? error.message : String(error)
-  console.error(message)
-  process.exit(1)
-})
+if (import.meta.main) {
+  main().catch((error) => {
+    const message = error instanceof Error ? error.message : String(error)
+    console.error(message)
+    process.exit(1)
+  })
+}
