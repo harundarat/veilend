@@ -13,8 +13,8 @@ Collateral is **only** accepted from the Veilend demo pool. Uniswap v4 hooks are
 3. `LendingVault.lockPosition(positionId)` records a flag-based lock. The NFT stays in the borrower’s wallet. The vault calls `CollateralLockHook.registerLock(positionId)`.
 4. An off-chain relayer calls `submitCreditReport(...)`. The vault values collateral (relayer `amount0 + amount1` snapshot, otherwise position liquidity 1:1) and transfers `principal = collateralValue * ltvBps / 10000` in the loan token.
 5. While locked, `beforeRemoveLiquidity` reverts `PositionLocked` when `liquidityDelta < 0`. Collect-fee (`liquidityDelta == 0`) is allowed. PositionManager sets `params.salt = bytes32(tokenId)`, so the hook keys locks as `uint256(params.salt)`.
-
-`repayLoan`, `liquidate`, and `withdrawSeizedLiquidity` currently revert `NotImplemented`.
+6. `repayLoan` pulls flat interest (`principal + principal * aprBps / 10000`) and unlocks the hook before `defaultDeadline` (`expiry + GRACE_PERIOD`).
+7. After `defaultDeadline`, anyone may `liquidate` (NFT `transferFrom` using the lock-time approval) then `withdrawSeizedLiquidity` (burn the seized position).
 
 ## Contracts
 
