@@ -186,7 +186,7 @@ contract LendingVault {
         view
         returns (uint256 collateralValue, uint256 principal)
     {
-        collateralValue = _collateralValue(positionId, 0, 0);
+        collateralValue = _valueOf(positionId, 0, 0);
         principal = collateralValue * ltvBps / BPS_DENOMINATOR;
     }
 
@@ -206,7 +206,7 @@ contract LendingVault {
         if (aprBps > BPS_DENOMINATOR) revert InvalidApr();
         if (expiry <= block.timestamp) revert InvalidExpiry();
 
-        uint256 collateralValue = _collateralValue(positionId, amount0Snapshot, amount1Snapshot);
+        uint256 collateralValue = _valueOf(positionId, amount0Snapshot, amount1Snapshot);
         uint256 principal = collateralValue * ltvBps / BPS_DENOMINATOR;
         if (principal == 0) revert InvalidLtv();
         if (loanToken.balanceOf(address(this)) < principal) revert InsufficientLiquidity();
@@ -224,7 +224,8 @@ contract LendingVault {
         emit CreditReportSubmitted(borrower, positionId, ltvBps, aprBps, expiry, principal);
     }
 
-    function _collateralValue(uint256 positionId, uint256 amount0Snapshot, uint256 amount1Snapshot)
+    /// @dev Priority 3: collateralValue = position liquidity (1 unit = 1 mock-USD). Snapshot args override when > 0.
+    function _valueOf(uint256 positionId, uint256 amount0Snapshot, uint256 amount1Snapshot)
         internal
         view
         returns (uint256)
