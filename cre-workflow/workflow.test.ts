@@ -1,133 +1,79 @@
 import { describe, expect } from 'bun:test'
-import type { TeeRuntime } from '@chainlink/cre-sdk'
+import type { HTTPPayload, TeeRuntime } from '@chainlink/cre-sdk'
 import { test } from '@chainlink/cre-sdk/test'
-import { initWorkflow, onCronTrigger } from './workflow'
+import { initWorkflow, onHttpTrigger, parseCreditRequest, type Config } from './workflow'
 
 const API_TOKEN = 'test-token'
+const NOW = new Date('2026-09-09T00:00:00.000Z')
 
-const makeConfig = () => ({
-	schedule: '0 */1 * * * *',
-	url: 'https://postman-echo.com/headers',
+const makeConfig = (): Config => ({
+	authorizedKeys: [],
 	secretId: 'API_TOKEN',
-	scoreThreshold: 500,
 })
 
-// The public test surface does not yet ship a TEE runtime factory
-// (`newTestRuntime` returns a DON `Runtime`), so we stand up the small slice of
-// `TeeRuntime` the handler actually uses: config, getSecret, callCapability
-// (which HTTPClient.sendRequest goes through), log, and usingTheDons.
-type FakeTeeRuntimeOptions = {
-	statusCode?: number
-	body?: string
-}
+const encodeInput = (body: unknown): Uint8Array => new TextEncoder().encode(JSON.stringify(body))
 
-const makeFakeTeeRuntime = ({ statusCode = 200, body = 'hello' }: FakeTeeRuntimeOptions = {}) => {
-	const capturedHeaders: string[] = []
-	const reports: unknown[] = []
+const makePayload = (body: unknown): HTTPPayload =>
+	({
+		input: encodeInput(body),
+	}) as HTTPPayload
+
+const makeFakeTeeRuntime = () => {
+	let secretCalls = 0
 	const logs: string[] = []
 
 	const runtime = {
 		config: makeConfig(),
-		getSecret: (request: { id?: string }) => ({
-			result: () => ({ id: request.id, value: API_TOKEN }),
-		}),
-		callCapability: ({ payload }: { payload: { multiHeaders?: Record<string, unknown> } }) => {
-			const auth = payload.multiHeaders?.Authorization as { values?: string[] } | undefined
-			capturedHeaders.push(...(auth?.values ?? []))
+		getSecret: (request: { id?: string }) => {
+			secretCalls += 1
 			return {
-				result: () => ({
-					statusCode,
-					body: new TextEncoder().encode(body),
-				}),
+				result: () => ({ id: request.id, value: API_TOKEN }),
 			}
 		},
+		now: () => NOW,
 		log: (message: string) => logs.push(message),
-		usingTheDons: () => ({
-			report: (input: unknown) => {
-				reports.push(input)
-				return { result: () => ({}) }
-			},
-		}),
 	}
 
-	return { runtime: runtime as unknown as TeeRuntime<ReturnType<typeof makeConfig>>, capturedHeaders, reports, logs }
+	return {
+		runtime: runtime as unknown as TeeRuntime<Config>,
+		logs,
+		secretCalls: () => secretCalls,
+	}
 }
 
-describe('onCronTrigger', () => {
-	test('injects the enclave-fetched secret into the outbound request', () => {
-		const { runtime, capturedHeaders } = makeFakeTeeRuntime()
-
-		onCronTrigger(runtime)
-
-		expect(capturedHeaders).toEqual([`Bearer ${API_TOKEN}`])
+describe('parseCreditRequest', () => {
+	test('normalizes positionId to a uint256 decimal string', () => {
+		const request = parseCreditRequest(makePayload({ borrower: '0xAbc', positionId: '1000001' }))
+		expect(request.borrower).toBe('0xAbc')
+		expect(request.positionId).toBe('1000001')
 	})
+})
 
-	test('confirms the secret reached the API when the response echoes it back', () => {
-		const { runtime } = makeFakeTeeRuntime({ body: `{"authorization":"Bearer ${API_TOKEN}"}` })
+describe('onHttpTrigger', () => {
+	test('returns terms only after fetching a secret', () => {
+		const { runtime, logs, secretCalls } = makeFakeTeeRuntime()
+		const terms = onHttpTrigger(
+			runtime,
+			makePayload({ borrower: '0xB34a4eAECB848d573a0410bc305787d5B69328B8', positionId: '1' }),
+		)
 
-		expect(onCronTrigger(runtime)).toContain('secret reached API: true')
-	})
-
-	test('reports the secret did not reach the API when it is absent', () => {
-		const { runtime } = makeFakeTeeRuntime({ body: '{"authorization":"Bearer other"}' })
-
-		expect(onCronTrigger(runtime)).toContain('secret reached API: false')
-	})
-
-	test('crosses back to the DON to generate a report', () => {
-		const { runtime, reports } = makeFakeTeeRuntime()
-
-		onCronTrigger(runtime)
-
-		expect(reports).toHaveLength(1)
-		expect(reports[0]).toMatchObject({
-			encoderName: 'evm',
-			signingAlgo: 'ecdsa',
-			hashingAlgo: 'keccak256',
-		})
-	})
-
-	test('APPROVEs when the confidential score clears the threshold', () => {
-		// 'zzzzzzzz' sums to 976, above the 500 threshold.
-		const { runtime } = makeFakeTeeRuntime({ body: 'zzzzzzzz' })
-
-		expect(onCronTrigger(runtime)).toContain('APPROVE')
-	})
-
-	test('REJECTs when the confidential score is below the threshold', () => {
-		// 'a' sums to 97, below the 500 threshold.
-		const { runtime } = makeFakeTeeRuntime({ body: 'a' })
-
-		expect(onCronTrigger(runtime)).toContain('REJECT')
-	})
-
-	test('throws on a non-2xx response and never reaches the DON', () => {
-		const { runtime, reports } = makeFakeTeeRuntime({ statusCode: 401 })
-
-		expect(() => onCronTrigger(runtime)).toThrow('status: 401')
-		expect(reports).toHaveLength(0)
-	})
-
-	test('does not log the secret or the raw response body', () => {
-		const { runtime, logs } = makeFakeTeeRuntime({ body: 'sensitive-response' })
-
-		onCronTrigger(runtime)
-
-		for (const line of logs) {
-			expect(line).not.toContain(API_TOKEN)
-			expect(line).not.toContain('sensitive-response')
-		}
+		expect(secretCalls()).toBe(1)
+		expect(terms.ltvBps).toBe(4000)
+		expect(terms.aprBps).toBe(1200)
+		expect(terms.expiry).toBe(Math.floor(NOW.getTime() / 1000) + 3600)
+		expect('creditScore' in terms).toBe(false)
+		expect(Object.keys(terms).sort()).toEqual(['aprBps', 'expiry', 'ltvBps'])
+		expect(logs.join('\n')).toContain('terms computed')
+		expect(logs.join('\n')).not.toContain(API_TOKEN)
 	})
 })
 
 describe('initWorkflow', () => {
-	test('registers the cron handler with a Nitro TEE constraint', () => {
+	test('registers the HTTP handler with a Nitro TEE constraint', () => {
 		const handlers = initWorkflow(makeConfig())
 
 		expect(handlers).toHaveLength(1)
-		expect(handlers[0].fn).toBe(onCronTrigger)
-
-		// handlerInTee attaches TEE requirements; cre.handler does not.
+		expect(handlers[0].fn).toBe(onHttpTrigger)
 		expect(handlers[0].requirements).toBeDefined()
 	})
 })
