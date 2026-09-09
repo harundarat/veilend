@@ -130,8 +130,10 @@ contract VeilendIntegrationTest is BaseTest {
         _approveAndLock();
         assertTrue(hook.isLocked(tokenId));
 
-        // Call through `this` so EasyPosm's view reads do not consume expectRevert.
-        // PoolManager wraps hook reverts as CustomRevert.WrappedError.
+        vm.expectRevert(abi.encodeWithSelector(IPositionManager.NotApproved.selector, address(this)));
+        this.decreaseLiquidity(tokenId, 1e18);
+
+        // Vault owns the NFT, so it is the authorized PositionManager caller; the hook still blocks decrease.
         vm.expectRevert(
             abi.encodeWithSelector(
                 CustomRevert.WrappedError.selector,
@@ -141,14 +143,17 @@ contract VeilendIntegrationTest is BaseTest {
                 abi.encodeWithSelector(Hooks.HookCallFailed.selector)
             )
         );
-        this.decreaseLiquidity(tokenId, 1e18);
+        this.decreaseLiquidityAsVault(tokenId, 1e18);
     }
 
     function test_lockThenCollect_succeeds() public {
         _approveAndLock();
         assertTrue(hook.isLocked(tokenId));
 
-        positionManager.collect(tokenId, 0, 0, address(this), block.timestamp, Constants.ZERO_BYTES);
+        vm.expectRevert(abi.encodeWithSelector(IPositionManager.NotApproved.selector, address(this)));
+        this.collectAsBorrower(tokenId);
+
+        this.collectAsVault(tokenId);
         assertEq(positionManager.getPositionLiquidity(tokenId), LIQUIDITY_AMOUNT);
     }
 
@@ -163,7 +168,7 @@ contract VeilendIntegrationTest is BaseTest {
 
         assertTrue(hook.isLocked(tokenId));
         assertTrue(vault.locked(tokenId));
-        assertEq(nft.ownerOf(tokenId), address(this));
+        assertEq(nft.ownerOf(tokenId), address(vault));
 
         LendingVault.Loan memory loan = vault.getLoan(tokenId);
         assertEq(loan.borrower, address(this));
@@ -230,7 +235,7 @@ contract VeilendIntegrationTest is BaseTest {
         assertEq(loan.expiry, expiry);
         assertEq(loan.defaultDeadline, expiry + vault.GRACE_PERIOD());
         assertTrue(hook.isLocked(tokenId));
-        assertEq(IERC721(address(positionManager)).ownerOf(tokenId), address(this));
+        assertEq(IERC721(address(positionManager)).ownerOf(tokenId), address(vault));
     }
 
     function test_liquidate_thenWithdrawSeizedLiquidity() public {
@@ -286,7 +291,9 @@ contract VeilendIntegrationTest is BaseTest {
         vm.prank(relayer);
         vault.submitCreditReport(address(this), tokenId, ltvBps, aprBps, expiry);
 
-        this.decreaseLiquidityExpectLocked(tokenId, 1e18);
+        vm.expectRevert(abi.encodeWithSelector(IPositionManager.NotApproved.selector, address(this)));
+        this.decreaseLiquidity(tokenId, 1e18);
+        this.decreaseLiquidityExpectLockedAsVault(tokenId, 1e18);
 
         loanToken.mint(address(this), principal * aprBps / 10_000);
         loanToken.approve(address(vault), repayAmount);
@@ -294,6 +301,7 @@ contract VeilendIntegrationTest is BaseTest {
         uint256 vaultBefore = loanToken.balanceOf(address(vault));
         vault.repayLoan(tokenId);
         assertEq(loanToken.balanceOf(address(vault)), vaultBefore + repayAmount);
+        assertEq(IERC721(address(positionManager)).ownerOf(tokenId), address(this));
         assertFalse(hook.isLocked(tokenId));
         assertFalse(vault.locked(tokenId));
         assertTrue(vault.getLoan(tokenId).repaid);
@@ -311,7 +319,29 @@ contract VeilendIntegrationTest is BaseTest {
         );
     }
 
-    function decreaseLiquidityExpectLocked(uint256 id, uint256 liquidityToRemove) external {
+    function decreaseLiquidityAsVault(uint256 id, uint256 liquidityToRemove) external {
+        vm.startPrank(address(vault));
+        positionManager.decreaseLiquidity(
+            id, liquidityToRemove, 0, 0, address(vault), block.timestamp, Constants.ZERO_BYTES
+        );
+        vm.stopPrank();
+    }
+
+    function collectAsBorrower(uint256 id) external {
+        positionManager.collect(id, 0, 0, address(this), block.timestamp, Constants.ZERO_BYTES);
+    }
+
+    function collectAsVault(uint256 id) external {
+        vm.startPrank(address(vault));
+        positionManager.collect(id, 0, 0, address(vault), block.timestamp, Constants.ZERO_BYTES);
+        vm.stopPrank();
+    }
+
+    function onERC721Received(address, address, uint256, bytes calldata) external pure returns (bytes4) {
+        return this.onERC721Received.selector;
+    }
+
+    function decreaseLiquidityExpectLockedAsVault(uint256 id, uint256 liquidityToRemove) external {
         vm.expectRevert(
             abi.encodeWithSelector(
                 CustomRevert.WrappedError.selector,
@@ -321,7 +351,7 @@ contract VeilendIntegrationTest is BaseTest {
                 abi.encodeWithSelector(Hooks.HookCallFailed.selector)
             )
         );
-        this.decreaseLiquidity(id, liquidityToRemove);
+        this.decreaseLiquidityAsVault(id, liquidityToRemove);
     }
 
     function _approveAndLock() internal {

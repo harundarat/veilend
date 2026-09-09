@@ -29,7 +29,7 @@ contract MockPositionManager {
         isApprovedForAll[msg.sender][operator] = approved;
     }
 
-    function transferFrom(address from, address to, uint256 tokenId) external {
+    function transferFrom(address from, address to, uint256 tokenId) public {
         require(ownerOf[tokenId] == from, "not owner");
         require(
             msg.sender == from || getApproved[tokenId] == msg.sender || isApprovedForAll[from][msg.sender],
@@ -37,6 +37,14 @@ contract MockPositionManager {
         );
         ownerOf[tokenId] = to;
         getApproved[tokenId] = address(0);
+    }
+
+    function safeTransferFrom(address from, address to, uint256 tokenId) external {
+        transferFrom(from, to, tokenId);
+    }
+
+    function safeTransferFrom(address from, address to, uint256 tokenId, bytes calldata) external {
+        transferFrom(from, to, tokenId);
     }
 
     function setPosition(uint256 tokenId, address owner, PoolKey memory key, uint128 liquidity) external {
@@ -139,7 +147,7 @@ contract LendingVaultTest is Test {
         vm.prank(borrower);
         vault.lockPosition(POSITION_ID);
 
-        assertEq(positionManager.ownerOf(POSITION_ID), borrower);
+        assertEq(positionManager.ownerOf(POSITION_ID), address(vault));
         assertTrue(hook.isLocked(POSITION_ID));
         assertTrue(vault.locked(POSITION_ID));
 
@@ -155,6 +163,7 @@ contract LendingVaultTest is Test {
         vm.prank(borrower);
         vm.expectRevert(LendingVault.ApprovalRequired.selector);
         vault.lockPosition(POSITION_ID);
+        assertEq(positionManager.ownerOf(POSITION_ID), borrower);
     }
 
     function test_lockPosition_revertsIfNotOwner() public {
@@ -196,6 +205,12 @@ contract LendingVaultTest is Test {
         _approveAndLock();
 
         vm.prank(borrower);
+        vm.expectRevert(LendingVault.NotPositionOwner.selector);
+        vault.lockPosition(POSITION_ID);
+
+        vm.prank(address(vault));
+        positionManager.approve(address(vault), POSITION_ID);
+        vm.prank(address(vault));
         vm.expectRevert(LendingVault.AlreadyLocked.selector);
         vault.lockPosition(POSITION_ID);
     }
@@ -338,6 +353,7 @@ contract LendingVaultTest is Test {
         vault.repayLoan(POSITION_ID);
 
         assertEq(mockStable.balanceOf(address(vault)), vaultBefore + repayAmount);
+        assertEq(positionManager.ownerOf(POSITION_ID), borrower);
         assertFalse(vault.locked(POSITION_ID));
         assertFalse(hook.isLocked(POSITION_ID));
 
@@ -360,6 +376,7 @@ contract LendingVaultTest is Test {
         vm.prank(borrower);
         vm.expectRevert();
         vault.repayLoan(POSITION_ID);
+        assertEq(positionManager.ownerOf(POSITION_ID), address(vault));
     }
 
     function test_repayLoan_revertsIfAlreadyRepaid() public {
@@ -469,18 +486,49 @@ contract LendingVaultTest is Test {
         vault.liquidate(POSITION_ID);
     }
 
-    function test_liquidate_withoutNftApproval_reverts() public {
+    function test_liquidate_succeedsAfterBorrowerRevokesApproval() public {
         (, uint256 expiry,) = _lockAndReport();
 
         vm.prank(borrower);
+        vm.expectRevert("not owner");
         positionManager.approve(address(0), POSITION_ID);
+        vm.prank(borrower);
+        positionManager.setApprovalForAll(address(vault), false);
 
         vm.warp(expiry + vault.GRACE_PERIOD() + 1);
         vm.prank(attacker);
-        vm.expectRevert(LendingVault.SeizeFailed.selector);
         vault.liquidate(POSITION_ID);
 
-        assertEq(positionManager.ownerOf(POSITION_ID), borrower);
+        assertEq(positionManager.ownerOf(POSITION_ID), address(vault));
+        assertTrue(vault.getLoan(POSITION_ID).liquidated);
+
+        vm.prank(borrower);
+        vm.expectRevert(LendingVault.AlreadyLiquidated.selector);
+        vault.repayLoan(POSITION_ID);
+    }
+
+    function test_lockPosition_borrowerCannotTransferNft() public {
+        _approveAndLock();
+
+        vm.prank(borrower);
+        vm.expectRevert("not owner");
+        positionManager.transferFrom(borrower, attacker, POSITION_ID);
+
+        vm.prank(borrower);
+        vm.expectRevert("not owner");
+        positionManager.safeTransferFrom(borrower, attacker, POSITION_ID);
+
+        assertEq(positionManager.ownerOf(POSITION_ID), address(vault));
+    }
+
+    function test_liquidate_revertsIfNftNotInVault() public {
+        (, uint256 expiry,) = _lockAndReport();
+        positionManager.setPosition(POSITION_ID, attacker, demoPoolKey, LIQUIDITY);
+
+        vm.warp(expiry + vault.GRACE_PERIOD() + 1);
+        vm.prank(attacker);
+        vm.expectRevert(LendingVault.NftNotInVault.selector);
+        vault.liquidate(POSITION_ID);
         assertFalse(vault.getLoan(POSITION_ID).liquidated);
     }
 
