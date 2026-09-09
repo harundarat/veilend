@@ -15,13 +15,13 @@ Not entering the Automated Liquidation Protection Challenge or the Continuity Tr
 
 1. Borrower holds a PositionManager NFT minted on the Veilend demo pool (the hook is part of that pool’s `PoolKey`).
 2. Borrower `approve`s `LendingVault` on that `positionId`.
-3. `lockPosition` sets a **flag-based lock**. The NFT stays in the borrower’s wallet. The vault calls `CollateralLockHook.registerLock`.
+3. `lockPosition` uses that approval **now**: `transferFrom` the NFT into the vault. `loan.borrower` stays the caller. The vault calls `CollateralLockHook.registerLock`.
 4. A trusted Bun relayer watches `PositionLocked`, runs `cre workflow simulate` (HTTP trigger, `handlerInTee`), and parses stdout for terms.
 5. Relayer calls `submitCreditReport` (`onlyRelayer`). The vault values collateral on-chain and transfers `principal = collateralValue * ltvBps / 10000` in `vdUSD`.
 6. `defaultDeadline = expiry + GRACE_PERIOD` (`GRACE_PERIOD = 300` seconds).
-7. While locked, `beforeRemoveLiquidity` reverts if `liquidityDelta < 0`. Collecting fees (`liquidityDelta == 0`) is allowed.
-8. **Repay:** borrower pays flat interest before the deadline → hook unlocks → decrease liquidity works again.
-9. **Default:** after the deadline, anyone may `liquidate` (NFT `transferFrom` using the lock-time approval) then `withdrawSeizedLiquidity` (burn the seized position).
+7. While locked, `beforeRemoveLiquidity` reverts if `liquidityDelta < 0`. Collecting fees (`liquidityDelta == 0`) is allowed at the hook; the vault does not `collectFees` or re-approve the NFT to the borrower.
+8. **Repay:** borrower pays flat interest before the deadline → hook unlocks → `safeTransferFrom` returns the NFT to `loan.borrower` → decrease liquidity works again.
+9. **Default:** after the deadline, anyone may `liquidate` (requires `ownerOf == vault`; no pull from the borrower) then `withdrawSeizedLiquidity` (burn the seized position).
 
 ```
 Borrower ──approve NFT──► PositionManager
@@ -41,12 +41,12 @@ Line numbers on `main`. Uniswap v4 contracts live under `contracts/src/` (this r
 | What | Where |
 |---|---|
 | Revert decrease while locked | [`CollateralLockHook._beforeRemoveLiquidity`](https://github.com/harundarat/veilend/blob/main/contracts/src/CollateralLockHook.sol#L76-L87) — `locked[id] && liquidityDelta < 0` |
-| Lock collateral (NFT stays with borrower) | [`LendingVault.lockPosition`](https://github.com/harundarat/veilend/blob/main/contracts/src/LendingVault.sol#L122-L153) |
-| Relayer writes terms and disburses | [`LendingVault.submitCreditReport`](https://github.com/harundarat/veilend/blob/main/contracts/src/LendingVault.sol#L162-L182) |
-| Valuation + principal | [`_valueOf`](https://github.com/harundarat/veilend/blob/main/contracts/src/LendingVault.sol#L306-L315) / `principal = collateralValue * ltvBps / 10000` in [`_submitCreditReport`](https://github.com/harundarat/veilend/blob/main/contracts/src/LendingVault.sol#L272-L304) |
-| Flat repay + unlock | [`LendingVault.repayLoan`](https://github.com/harundarat/veilend/blob/main/contracts/src/LendingVault.sol#L184-L201) |
-| Seize NFT after deadline | [`LendingVault.liquidate`](https://github.com/harundarat/veilend/blob/main/contracts/src/LendingVault.sol#L203-L225) |
-| Burn seized LP | [`LendingVault.withdrawSeizedLiquidity`](https://github.com/harundarat/veilend/blob/main/contracts/src/LendingVault.sol#L227-L257) |
+| Lock collateral (custody NFT in vault) | [`LendingVault.lockPosition`](https://github.com/harundarat/veilend/blob/main/contracts/src/LendingVault.sol#L123-L161) |
+| Relayer writes terms and disburses | [`LendingVault.submitCreditReport`](https://github.com/harundarat/veilend/blob/main/contracts/src/LendingVault.sol#L170-L190) |
+| Valuation + principal | [`_valueOf`](https://github.com/harundarat/veilend/blob/main/contracts/src/LendingVault.sol#L314-L322) / `principal = collateralValue * ltvBps / 10000` in [`_submitCreditReport`](https://github.com/harundarat/veilend/blob/main/contracts/src/LendingVault.sol#L279-L311) |
+| Flat repay + unlock + return NFT | [`LendingVault.repayLoan`](https://github.com/harundarat/veilend/blob/main/contracts/src/LendingVault.sol#L192-L213) |
+| Liquidate after deadline (NFT already in vault) | [`LendingVault.liquidate`](https://github.com/harundarat/veilend/blob/main/contracts/src/LendingVault.sol#L215-L232) |
+| Burn seized LP | [`LendingVault.withdrawSeizedLiquidity`](https://github.com/harundarat/veilend/blob/main/contracts/src/LendingVault.sol#L234-L264) |
 | TEE handler (LTV is decided here) | [`handlerInTee`](https://github.com/harundarat/veilend/blob/main/cre-workflow/credit-scoring-workflow/workflow.ts#L113-L131) → [`onHttpTrigger`](https://github.com/harundarat/veilend/blob/main/cre-workflow/credit-scoring-workflow/workflow.ts#L92-L111) |
 | Scoring formula (plan §13.4) | [`scoreToTerms`](https://github.com/harundarat/veilend/blob/main/cre-workflow/credit-scoring-workflow/scoring.ts#L69-L87) |
 | Event → simulate → report | [`handlePositionLocked`](https://github.com/harundarat/veilend/blob/main/relayer/src/index.ts#L79-L121) / [`runCreSimulate`](https://github.com/harundarat/veilend/blob/main/relayer/src/simulate.ts#L30-L57) |
@@ -62,7 +62,7 @@ cd contracts
 forge test --match-contract 'LendingVaultTest|VeilendIntegrationTest|CollateralLockHookTest'
 ```
 
-48 tests. Includes `test_repayLoan_pullsFlatInterestAndUnlocks`, `test_repayLoan_unlocksAndAllowsDecrease`, `test_liquidate_afterDeadline_seizesNft`, `test_liquidate_thenWithdrawSeizedLiquidity`.
+50 tests across those three contracts. Includes `test_lockPosition_succeeds`, `test_repayLoan_pullsFlatInterestAndUnlocks`, `test_repayLoan_unlocksAndAllowsDecrease`, `test_liquidate_succeedsAfterBorrowerRevokesApproval`, `test_liquidate_thenWithdrawSeizedLiquidity`.
 
 ### CRE simulate (terms only)
 
@@ -98,8 +98,7 @@ Judges should treat these as known MVP constraints, not hidden gaps.
 - **Demo pool only.** Collateral is accepted only from the Veilend pool initialized with this hook. Existing Uniswap v4 LP (ETH/USDC, etc.) cannot be locked: a v4 hook is part of `PoolKey`, not of an NFT.
 - **No oracle.** `_valueOf` uses `amount0Snapshot + amount1Snapshot` when the relayer supplies a snapshot `> 0`; otherwise `collateralValue = getPositionLiquidity` (1 unit of liquidity = 1 mock-USD). The captured e2e used the liquidity fallback.
 - **Trusted relayer, not DON verification.** CRE ↔ vault is `onlyRelayer` + `cre workflow simulate` from a Bun script. Production would replace this with on-chain CRE report verification.
-- **Revocable NFT approval.** `lockPosition` requires approval, but the borrower can revoke it afterwards. Then `liquidate` reverts `SeizeFailed`. Known limitation.
-- **Flag-based lock.** The NFT stays with the borrower until default. Paths that unwind a position **outside** `modifyLiquidity` are not closed in this MVP.
+- **Vault custody while locked.** `lockPosition` pulls the NFT into the vault. Revoking approval or transferring from the borrower afterwards does not move it and does not block `liquidate`. The hook still reverts `liquidityDelta < 0` until repay or liquidate unlocks. There is no vault `collectFees`; fees accrue on the position and the borrower collects after repay returns the NFT. On liquidate, fees are pulled with the liquidity.
 - **`GRACE_PERIOD = 300` seconds** — demo/testnet only. A production grace period would be days.
 - **Flat repay, not pro-rata.** `repayAmount = principal + principal * aprBps / 10000`, independent of how long the loan was open.
 - **Hybrid / partly simulated credit data.** TEE history is a lookup of three demo wallets in workflow config (`pastLoansCount` + `onTimeRepaymentRate`). One on-chain LP data point (`liquidity` + age from `Transfer` mint logs) is used when the PositionManager read succeeds. Simulate wallets A/B/C use `dataSource=config` (tokenIds `1000001–1000003` do not exist). The fork e2e on position `39014` used `dataSource=onchain`. Intermediate scores stay in the enclave; stdout is only `{ ltvBps, aprBps, expiry }`.

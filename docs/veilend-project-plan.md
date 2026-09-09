@@ -36,7 +36,7 @@ Alur singkat (versi MVP, disederhanakan dari full lending protocol):
 
 1. Borrower punya posisi LP di **pool demo Veilend** — pool Uniswap v4 yang di-deploy proyek ini sendiri, dengan `CollateralLockHook` terpasang di `PoolKey` saat `initialize`. Posisi di pool Uniswap v4 existing (tanpa hook kita) **tidak diterima** sebagai agunan (lihat Bagian 12, Keputusan #11).
 2. Sebelum lock, borrower `approve(vault, positionId)` di `PositionManager` — approval ini prasyarat wajib, dicek oleh `LendingVault` (lihat Bagian 12, Keputusan #6).
-3. Borrower mengunci posisi tersebut sebagai agunan di kontrak `LendingVault` — **flag-based lock**: `LendingVault` hanya menyimpan status `locked[positionId] = true`, NFT posisi **tetap di wallet borrower** (tidak ditransfer/custody) selama pinjaman sehat. Enforcement penarikan likuiditas sepenuhnya mengandalkan `CollateralLockHook` pada pool demo itu; approval di langkah 2 baru "dipakai" kalau borrower default (lihat langkah 9–10).
+3. Borrower mengunci posisi tersebut sebagai agunan di kontrak `LendingVault` — **vault custody**: `lockPosition` memakai approval langkah 2 **sekarang** (`transferFrom` NFT ke vault). State loan tetap mencatat `borrower = msg.sender` (bukan `ownerOf` setelah transfer). Hook `registerLock` tetap dipanggil; enforcement decrease mengandalkan `CollateralLockHook` plus kepemilikan NFT di vault.
 4. `LendingVault` memicu **CRE Workflow** (via event/HTTP trigger).
 5. Di dalam CRE, ada **confidential handler** (`handlerInTee`) yang:
    - Mengambil data privat — pendekatan **hybrid**: 1 data point posisi LP asli (misal ukuran/umur posisi, diambil via view call ke `PositionManager`) digabung dengan riwayat risiko yang disimulasikan untuk keperluan demo.
@@ -45,8 +45,8 @@ Alur singkat (versi MVP, disederhanakan dari full lending protocol):
 6. Hasil (LTV, rate, expiry) dikirim on-chain lewat laporan yang diverifikasi konsensus DON, ditulis ke `LendingVault`. `expiry` di sini juga jadi basis `defaultDeadline` (lihat langkah 9).
 7. `LendingVault` menghitung `collateralValue` on-chain (harga mock 1:1) lalu mencairkan `principal = collateralValue × ltvBps / 10000` dalam mock stablecoin ke borrower (lihat Bagian 12, Keputusan #12).
 8. Selama pinjaman aktif, **hook v4** (`CollateralLockHook`) mencegah borrower **mengurangi** likuiditas dari posisi yang terkunci (`liquidityDelta < 0` di-revert). Collect fee (`liquidityDelta == 0`) **tetap diizinkan** supaya agunan tetap produktif.
-9. **Jalur lunas:** Saat pinjaman dilunasi (`repayLoan()`) sebelum `defaultDeadline` (`expiry + gracePeriod`) → hook membuka kunci → posisi bisa di-withdraw normal lagi.
-10. **Jalur default:** Kalau borrower belum melunasi setelah lewat `defaultDeadline`, siapa pun (termasuk keeper/bot) bisa memanggil `liquidate(positionId)` di `LendingVault`. Fungsi ini menggunakan approval dari langkah 2 untuk memindahkan NFT posisi dari wallet borrower ke `LendingVault` (`transferFrom`), lalu Vault mencairkan likuiditas dari posisi tersebut (`withdrawSeizedLiquidity`) untuk menutup pinjaman.
+9. **Jalur lunas:** Saat pinjaman dilunasi (`repayLoan()`) sebelum `defaultDeadline` (`expiry + gracePeriod`) → vault menarik stable → hook membuka kunci → `safeTransferFrom` mengembalikan NFT ke `loan.borrower` → posisi bisa di-withdraw normal lagi.
+10. **Jalur default:** Kalau borrower belum melunasi setelah lewat `defaultDeadline`, siapa pun (termasuk keeper/bot) bisa memanggil `liquidate(positionId)` di `LendingVault`. NFT **sudah** di vault sejak lock; `liquidate` mensyaratkan `ownerOf == vault` (tidak `transferFrom` dari borrower), unlock hook, lalu `withdrawSeizedLiquidity` mencairkan likuiditas untuk menutup pinjaman.
 
 ```mermaid
 sequenceDiagram
@@ -60,7 +60,7 @@ sequenceDiagram
 
     Borrower->>PM: approve(vault, positionId)
     Borrower->>Vault: lockPosition(positionId)
-    Vault->>PM: cek approval (syarat wajib)
+    Vault->>PM: transferFrom(borrower, vault, positionId)
     Vault->>Hook: registerLock(positionId)
     Vault->>CRE: requestCreditScore(borrower, positionId)
     Note over CRE: handlerInTee() jalan di dalam TEE<br/>ambil data privat + hitung skor
@@ -75,9 +75,10 @@ sequenceDiagram
     alt Jalur lunas (sebelum defaultDeadline)
         Borrower->>Vault: repayLoan()
         Vault->>Hook: unlockPosition(positionId)
+        Vault->>PM: safeTransferFrom(vault, borrower, positionId)
     else Jalur default (setelah expiry + gracePeriod)
         Liquidator->>Vault: liquidate(positionId)
-        Vault->>PM: transferFrom(borrower, vault, positionId)
+        Note over Vault: ownerOf sudah vault sejak lock
         Vault->>Hook: unlockPosition(positionId)
         Vault->>PM: withdrawSeizedLiquidity(positionId)
         Note over Vault: Hasil likuiditas dipakai<br/>menutup pinjaman
@@ -90,8 +91,8 @@ sequenceDiagram
 
 | Komponen | Tanggung jawab | Teknologi |
 |---|---|---|
-| `CollateralLockHook.sol` | Hook v4 milik **pool demo Veilend**. Di `beforeRemoveLiquidity`, revert jika posisi terkunci **dan** `liquidityDelta < 0`. Collect fee (`liquidityDelta == 0`) lolos. Satu-satunya lapisan enforcement karena lock bersifat flag-based | Solidity, Uniswap v4 hooks (`beforeRemoveLiquidity`) |
-| `LendingVault.sol` | Kelola flag lock posisi (tanpa custody NFT selama sehat), cek approval + cek posisi berasal dari pool demo, terima laporan LTV dari CRE, hitung `principal` dari `collateralValue`, cairkan pinjaman, tracking repayment, **eksekusi seizure via `liquidate()` + `withdrawSeizedLiquidity()` saat default** | Solidity |
+| `CollateralLockHook.sol` | Hook v4 milik **pool demo Veilend**. Di `beforeRemoveLiquidity`, revert jika posisi terkunci **dan** `liquidityDelta < 0`. Collect fee (`liquidityDelta == 0`) lolos. Tetap menahan decrease selama lock, termasuk jika vault sendiri belum unlock | Solidity, Uniswap v4 hooks (`beforeRemoveLiquidity`) |
+| `LendingVault.sol` | Custody NFT posisi saat `lockPosition`, cek approval + cek posisi berasal dari pool demo, terima laporan LTV dari CRE, hitung `principal` dari `collateralValue`, cairkan pinjaman, kembalikan NFT saat `repayLoan`, **eksekusi `liquidate()` (NFT sudah di vault) + `withdrawSeizedLiquidity()` saat default** | Solidity |
 | Pool demo Veilend | Pool v4 yang di-`initialize` dengan `CollateralLockHook` sebagai hook di `PoolKey`; satu-satunya pool yang posisinya sah jadi agunan | Uniswap v4 `PoolManager.initialize` + 2 mock ERC-20 |
 | `credit-scoring-workflow` | Workflow CRE dengan confidential handler untuk hitung skor & LTV | TypeScript (`@chainlink/cre-sdk`) |
 | Mock token pair + mock stablecoin | Dua token pool (harga 1:1) dan token yang dipinjamkan ke borrower | ERC-20 sederhana (testnet) |
@@ -99,9 +100,9 @@ sequenceDiagram
 
 **Catatan desain — hook menempel ke pool, bukan ke NFT (keputusan final, lihat Bagian 12 #11):** Hook Uniswap v4 adalah bagian dari `PoolKey` dan hanya dipanggil untuk pool yang diinisialisasi dengan hook itu. `CollateralLockHook` **tidak bisa** mengunci posisi di pool v4 existing (ETH/USDC resmi Sepolia, dsb.). Karena itu collateral MVP **hanya** posisi yang di-mint di pool demo Veilend. `ISubscriber` PositionManager **bukan** pengganti hook: subscriber adalah notifier, user bisa `unsubscribe`, dan `transferFrom` melepas subscriber. Limitasi “bukan sembarang LP v4” wajib ditulis di README, bukan disembunyikan.
 
-**Catatan desain — flag-based lock (keputusan final, lihat Bagian 12):** `LendingVault` **tidak** melakukan custody transfer atas NFT posisi selama pinjaman sehat. Ini lebih sederhana untuk dibangun solo dalam 6 hari (dibantu AI coding agent), dan tetap membuktikan keamanan collateral karena `CollateralLockHook` yang menegakkan pembatasan decrease liquidity di **pool demo**, bukan siapa pemilik NFT-nya. Limitasi (jalur lain di luar `modifyLiquidity` untuk melepas posisi) tetap didokumentasikan sebagai known limitation di README. Collect fee selama lock **sengaja diizinkan**.
+**Catatan desain — vault custody saat lock (Keputusan #2, update 9 September 2026):** `lockPosition` memindahkan NFT PositionManager ke vault. `loan.borrower` tetap alamat pemanggil. Borrower bukan owner → tidak bisa `approve(0)` yang berarti, tidak bisa transfer NFT, tidak bisa `modifyLiquidities`. Hook tetap menahan decrease selama `locked == true` (termasuk jika vault sendiri belum unlock). Collect fee di level hook (`liquidityDelta == 0`) tetap diizinkan; vault **tidak** `collectFees` dan **tidak** meng-approve NFT kembali ke borrower selama pinjaman aktif.
 
-**Catatan desain — mekanisme default / approval-based seizure (keputusan final, lihat Bagian 12, Keputusan #6):** Karena lock bersifat flag-based (NFT tidak dikustodi di awal), `LendingVault` butuh jalur untuk benar-benar menyita collateral kalau borrower gagal bayar. Solusinya: borrower wajib `approve(vault, positionId)` di `PositionManager` sebagai syarat `lockPosition()` — approval ini tidak langsung dieksekusi, hanya "disimpan" sebagai izin. Begitu `block.timestamp > expiry + gracePeriod` dan pinjaman belum lunas, fungsi permissionless `liquidate(positionId)` bisa dipanggil siapa pun untuk mengeksekusi `transferFrom(borrower, vault, positionId)` memakai approval tersebut, lalu `withdrawSeizedLiquidity()` mencairkan likuiditas dari posisi yang disita untuk menutup pinjaman. `CollateralLockHook` sendiri tidak berubah sama sekali — ia tetap hanya menjaga `removeLiquidity` selama `locked == true`; seizure murni soal perpindahan kepemilikan NFT (ERC-721), bukan soal hook.
+**Catatan desain — mekanisme default / NFT sudah di vault (Keputusan #6, update 9 September 2026):** Approval di `lockPosition` adalah izin **pull sekarang**, bukan cadangan sampai default. Setelah `block.timestamp > expiry + gracePeriod` dan pinjaman belum lunas, `liquidate(positionId)` permissionless mensyaratkan `ownerOf == vault` (error `NftNotInVault` jika tidak), unlock hook, lalu `withdrawSeizedLiquidity()` mencairkan likuiditas. Tidak ada `transferFrom` dari borrower saat liquidate. `CollateralLockHook` tidak berubah — ia tetap hanya menjaga `removeLiquidity` selama `locked == true`.
 
 **Detail confidential handler (bagian paling penting untuk prize Chainlink):**
 - Wajib pakai `handlerInTee` (TypeScript) — bukan handler biasa.
@@ -131,21 +132,21 @@ sequenceDiagram
 
 **MVP (harus selesai):**
 - Deploy `CollateralLockHook` + **initialize pool demo Veilend** (2 mock ERC-20, hook terpasang di `PoolKey`) + mint ≥1 posisi tes di pool itu (keputusan #11)
-- Hook v4 yang berhasil block decrease liquidity (`liquidityDelta < 0`) saat posisi terkunci, dan **tetap mengizinkan collect fee** (flag-based, tanpa custody NFT selama sehat)
+- Hook v4 yang berhasil block decrease liquidity (`liquidityDelta < 0`) saat posisi terkunci, dan **tetap mengizinkan collect fee** di level hook (custody NFT di vault selama lock)
 - CRE workflow dengan `handlerInTee` yang menghitung skor dari data hybrid (1 data point LP asli + simulasi risiko)
 - Simulasi CRE CLI berhasil dijalankan & di-capture sebagai bukti (screenshot/log)
-- `LendingVault` yang bisa lock (cek approval + cek pool demo) → dapat laporan LTV → hitung `principal` dari `collateralValue` (#12) → cairkan pinjaman → repay → unlock
-- **Mekanisme default minimal (approval-based seizure)**: `liquidate(positionId)` yang menyita NFT via approval saat lewat `defaultDeadline`, lalu `withdrawSeizedLiquidity()` mencairkan collateral untuk menutup pinjaman — didemokan end-to-end (keputusan final, lihat Bagian 12, Keputusan #6)
-- README + FEEDBACK.md + demo video — README wajib menyebut: (a) hanya pool demo ber-hook, (b) harga 1:1 / tanpa oracle, (c) relayer tepercaya, (d) approval bisa dicabut setelah lock
-- Known limitation flag-based lock (jalur lepas posisi di luar decrease-via-hook) tetap didokumentasikan sebagai future work, bukan di-handle di MVP
+- `LendingVault` yang bisa lock (cek approval + pull NFT ke vault + cek pool demo) → dapat laporan LTV → hitung `principal` dari `collateralValue` (#12) → cairkan pinjaman → repay (kembalikan NFT) → unlock
+- **Mekanisme default minimal (NFT sudah di vault)**: `liquidate(positionId)` mensyaratkan `ownerOf == vault` saat lewat `defaultDeadline`, lalu `withdrawSeizedLiquidity()` mencairkan collateral untuk menutup pinjaman — didemokan end-to-end (lihat Bagian 12, Keputusan #6)
+- README + FEEDBACK.md + demo video — README wajib menyebut: (a) hanya pool demo ber-hook, (b) harga 1:1 / tanpa oracle, (c) relayer tepercaya, (d) NFT dikustodi vault selama lock (bukan “approval bisa dicabut setelah lock”)
+- Hook tetap menahan decrease selama lock; collect fee di tengah pinjaman tidak diimplementasi di vault (`collectFees` di luar scope)
 
 **Stretch goals (kalau waktu sisa):**
 - Ikut Automated Liquidation Protection Challenge — **keputusan ikut/tidak baru diambil di hari buffer (hari 6), setelah MVP selesai** (lihat Bagian 12)
 - Live deployment CRE workflow ke jaringan (bukan cuma simulasi)
 - Frontend dashboard yang lebih polished
 - Dynamic re-scoring (workflow jalan ulang berkala, bukan cuma sekali di awal pinjaman)
-- Custody transfer penuh atas NFT posisi (upgrade dari flag-based) sebagai future work
 - Auto-liquidator/keeper bot, mekanisme lelang, atau partial liquidation (di MVP, seizure bersifat all-or-nothing dan dipanggil manual/permissionless tanpa keeper otomatis)
+- `collectFees()` di vault selama pinjaman aktif
 
 ---
 
@@ -173,9 +174,9 @@ sequenceDiagram
 | Data "credit score" terlihat terlalu mengada-ada/mock | Juri ragu soal realism | Jelaskan eksplisit di README & demo bahwa data disimulasikan untuk keperluan demo, tapi arsitektur confidential-nya real dan bisa disambungkan ke data asli |
 | Waktu habis sebelum sempat menulis FEEDBACK.md dengan baik | Kehilangan syarat wajib Uniswap | Alokasikan **Hari 5 (11 Sept)** khusus untuk dokumentasi, jangan ditunda ke hari terakhir |
 | Salah kaprah “hook mengunci semua LP v4 existing” | Integrasi hari 1 gagal / juri Uniswap anggap tidak paham v4 | Collateral hanya dari pool demo ber-hook (Keputusan #11); jangan pakai `ISubscriber` sebagai ganti enforcement |
-| Flag-based lock (tanpa custody NFT) punya celah teoretis kalau ada jalur lepas posisi di luar decrease-via-hook | Juri/reviewer mempertanyakan keamanan desain | Sebutkan eksplisit sebagai known limitation + future work di README, jangan disembunyikan |
+| Jalur lepas posisi di luar `modifyLiquidity` pada pool demo tidak terlihat hook | Residual risk meski NFT sudah di vault | NFT dikustodi vault saat lock (Keputusan #2); hook tetap menahan decrease. Jangan klaim hook menutup semua unwind path |
 | LTV tanpa valuasi agunan → nominal pinjaman tidak terdefinisi | Vault tidak bisa mencairkan angka yang bisa dijelaskan ke juri | Pakai rumus Keputusan #12 (`collateralValue = amount0 + amount1` harga 1:1; `principal = collateralValue × ltvBps / 10000`); tanpa oracle di MVP |
-| Borrower tidak melakukan `approve()` saat lock, atau mencabut approval setelah lock → `liquidate()` gagal dieksekusi saat default | Lender tidak bisa menyita collateral, mekanisme default jadi tidak efektif | Approval dicek sebagai syarat wajib di `lockPosition()` (revert kalau belum approve), jadi masalah ketahuan di awal transaksi lock, bukan saat default terjadi; dokumentasikan di README bahwa pencabutan approval setelah lock adalah known limitation (di luar kontrol kontrak tanpa hook approval tambahan) |
+| Borrower tidak melakukan `approve()` saat lock | `lockPosition` tidak bisa pull NFT | Approval dicek sebagai syarat wajib di `lockPosition()` (revert `ApprovalRequired`). Setelah pull, revoke/transfer dari borrower tidak memindahkan NFT dan tidak merusak `liquidate` |
 | Kerja solo → tidak ada paralelisasi, satu blocker bisa menunda seluruh urutan berikutnya; timeline kini lebih padat (6 hari) sehingga marjin toleransi delay lebih kecil | Delay berantai di timeline | Ikuti urutan hari di Bagian 7 dengan ketat, pakai starter template resmi, dan manfaatkan AI coding agent untuk mempercepat penulisan kode rutin sehingga waktu manusia bisa fokus ke bagian paling berisiko (hook, CRE handler, jalur default) |
 
 ---
@@ -226,11 +227,11 @@ Keputusan #1–#6 (produk) plus #11–#12 (arsitektur, dikunci 7 Sept). Keputusa
 | # | Keputusan | Pilihan Final | Alasan Singkat | Status |
 |---|---|---|---|---|
 | 1 | Sumber data "credit score" | **Hybrid** — 1 data point posisi LP asli (via `PositionManager`) + sisanya riwayat risiko simulasi, diproses di dalam `handlerInTee` | Titik tengah: tetap ada elemen data nyata untuk kredibilitas, tanpa nambah kompleksitas integrasi API/indexer eksternal | ✅ Final, sudah disinkron ke Bagian 3 & 4 |
-| 2 | Kepemilikan posisi LP saat dikunci | **Flag-based**, NFT tetap di wallet borrower selama pinjaman sehat, enforcement penarikan murni via `CollateralLockHook` | Lebih cepat dibangun solo, dan enforcement inti memang di level hook — bukan di siapa pemilik NFT | ✅ Final, sudah disinkron ke Bagian 3, 4 & 8 |
-| 3 | Liquidation engine sungguhan | **Direvisi** — versi minimal (approval-based seizure) dibangun di MVP; yang tetap jadi future work hanya auto-liquidator/keeper bot, lelang, dan partial liquidation | Skenario gagal bayar awalnya tidak tercakup di MVP; setelah dievaluasi ulang, mekanisme minimal tetap diperlukan agar protokol lending punya jalur penyelesaian gagal bayar yang lengkap, tanpa menambah scope besar (lihat Keputusan #6) | 🔄 Direvisi, sudah disinkron ke Bagian 3, 4, 6, 7, 8 & 11 |
+| 2 | Kepemilikan posisi LP saat dikunci | **Vault custody** (update 9 Sept 2026): `lockPosition` `transferFrom` NFT ke vault. `loan.borrower` tetap pemanggil. Hook tetap menahan decrease | Menutup celah revoke/transfer NFT setelah pinjaman cair; approval ERC-721 bukan lock | ✅ Final (direvisi 9 Sept 2026), sudah disinkron ke Bagian 3, 4 & 8 |
+| 3 | Liquidation engine sungguhan | **Direvisi** — versi minimal (`liquidate` + `withdrawSeizedLiquidity`) dibangun di MVP; yang tetap jadi future work hanya auto-liquidator/keeper bot, lelang, dan partial liquidation | Skenario gagal bayar awalnya tidak tercakup di MVP; setelah dievaluasi ulang, mekanisme minimal tetap diperlukan agar protokol lending punya jalur penyelesaian gagal bayar yang lengkap, tanpa menambah scope besar (lihat Keputusan #6) | 🔄 Direvisi, sudah disinkron ke Bagian 3, 4, 6, 7, 8 & 11 |
 | 4 | Ikut stretch goal Automated Liquidation Protection Challenge ($500) | **Ditunda** — evaluasi ulang di hari 6 (buffer), setelah MVP selesai | Ini scope tambahan dengan hard deadline join (mulai 8 Sept) dan tidak bisa diupdate setelah deadline submission; realistisnya baru bisa dinilai kalau MVP sudah aman. Timeline kini 6 hari (bukan 11), jadi marjin untuk stretch goal ini makin tipis — realistisnya kemungkinan besar akan di-skip | ⏳ Checkpoint di Bagian 7 (hari 6) |
 | 5 | Ukuran tim & pembagian kerja | **Solo** — tidak ada pembagian kerja paralel | Timeline di Bagian 7 dijalankan sekuensial apa adanya, tanpa perlu breakdown per-orang | ✅ Final |
-| 6 | Mekanisme default/gagal bayar borrower | **Approval-based seizure**: borrower wajib `approve(vault, positionId)` di `PositionManager` sebagai syarat `lockPosition()`. Kalau lewat `defaultDeadline` (`expiry + gracePeriod`) tanpa pelunasan, fungsi permissionless `liquidate(positionId)` memakai approval itu untuk `transferFrom` NFT ke `LendingVault`, lalu `withdrawSeizedLiquidity()` mencairkan collateral untuk menutup pinjaman | Menjaga desain flag-based lock (Keputusan #2) tanpa custody NFT di awal, sambil tetap punya jalur nyata bagi lender untuk recoup dana saat default — pola approve-then-seize standar di DeFi lending dan minim kode tambahan (reuse `expiry` yang sudah mengalir dari CRE report) | ✅ Final, sudah disinkron ke Bagian 3, 4, 6, 7, 8 & 11 |
+| 6 | Mekanisme default/gagal bayar borrower | **NFT sudah di vault** (update 9 Sept 2026): approval hanya prasyarat pull di `lockPosition`. `liquidate(positionId)` permissionless setelah `defaultDeadline` mensyaratkan `ownerOf == vault` (tidak `transferFrom` dari borrower), unlock hook, lalu `withdrawSeizedLiquidity()` | Celah `approve(0)` / `setApprovalForAll(false)` / transfer setelah lock membuat liquidate gagal pada model approval-cadangan. Custody di lock menutup itu tanpa wrapper NFT baru | ✅ Final (direvisi 9 Sept 2026), sudah disinkron ke Bagian 3, 4, 6, 7, 8 & 11 |
 | 11 | Scope pool / di pool mana hook berlaku | **Hanya pool demo Veilend.** Deploy `CollateralLockHook`, lalu `initialize` pool sendiri dengan hook itu di `PoolKey`. `lockPosition()` revert jika posisi bukan milik pool demo. Posisi di pool v4 existing **ditolak**. Collect fee (`liquidityDelta == 0`) diizinkan; decrease (`liquidityDelta < 0`) di-revert selama lock | Hook v4 menempel ke pool saat initialize, bukan ke NFT/PositionManager global. Tanpa pool sendiri, `beforeRemoveLiquidity` tidak pernah dipanggil untuk posisi borrower. `ISubscriber` bukan enforcement | ✅ Final 7 Sept 2026, sudah disinkron ke Bagian 3, 4, 6, 7 & 8 |
 | 12 | Valuasi agunan & nominal pinjaman | **Tanpa oracle.** Pair pool = 2 mock ERC-20 harga **1:1**. `collateralValue = amount0 + amount1`. `principal = collateralValue × ltvBps / 10000`. Vault di-prefund mock stablecoin saat deploy. CRE hanya mengembalikan syarat kredit `(ltvBps, aprBps, expiry)`; angka `principal` dihitung on-chain di vault | LTV tanpa nilai posisi tidak bisa mencairkan pinjaman. Price feed di luar scope 6 hari. Pemisahan ini juga jernih untuk juri: TEE memutuskan *berapa persen*, vault memutuskan *berapa banyak* | ✅ Final 7 Sept 2026, sudah disinkron ke Bagian 3, 4, 6, 7, 8 & 14 |
 

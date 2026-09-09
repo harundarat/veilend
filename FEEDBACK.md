@@ -8,7 +8,7 @@ This is feedback on **Uniswap v4 documentation and tooling**, from building a ho
 - **HookMiner** (via the template / hookmate) to mine an address with `BEFORE_REMOVE_LIQUIDITY_FLAG` only.
 - Uniswap v4 **PoolManager** and **PositionManager** on Ethereum Sepolia (`0xE03A1074…3543` / `0x429ba701…09b4`).
 - A single hook permission: `beforeRemoveLiquidity`.
-- PositionManager as an ERC-721: `approve(vault, tokenId)` at lock time, then `transferFrom` on default.
+- PositionManager as an ERC-721: `approve(vault, tokenId)` at lock time, then the vault `transferFrom`s the NFT to itself. Approval is a pull permit, not a lock that lasts until default.
 
 We replaced the template’s Counter `beforeSwap` / `afterSwap` example with `CollateralLockHook`. The rest of the harness (pool initialize, mint via PositionManager, `EasyPosm`) stayed.
 
@@ -44,9 +44,9 @@ The template Counter never exercises liquidity hooks, so this mapping is not in 
 
 ### 4. Approval is not a lock
 
-PositionManager NFTs behave like ordinary ERC-721: `approve` / `setApprovalForAll` / `transferFrom` work. That is good. There is no “approval that survives revoke for the life of a loan.” A borrower who `approve`s a vault can `approve(0)` later; a later `transferFrom` fails. If Uniswap wants hooks + PositionManager used as collateral rails, the docs should say so explicitly: **approval is not custody**, and **a hook cannot see ERC-721 approval changes**.
+PositionManager NFTs behave like ordinary ERC-721: `approve` / `setApprovalForAll` / `transferFrom` work. That is good. There is no “approval that survives revoke for the life of a loan.” A borrower who `approve`s a vault can `approve(0)` later; a later `transferFrom` from that borrower fails. If Uniswap wants hooks + PositionManager used as collateral rails, the docs should say so explicitly: **approval is not custody**, and **a hook cannot see ERC-721 approval changes**.
 
-Related: because our lock is a flag (NFT stays with the borrower), any unwind path that does **not** go through `modifyLiquidity` on that pool is invisible to the hook. Peripheral routers / future position managers are a residual risk. A short “what a liquidity hook cannot see” section would be more useful than another `beforeSwap` tutorial.
+That gap is why Veilend now takes custody of the NFT in `lockPosition` instead of leaving it with the borrower until default. Revoke after lock no longer blocks liquidate. The hook still cannot see ERC-721 transfers: any unwind path that does **not** go through `modifyLiquidity` on that pool is invisible to it. Peripheral routers / future position managers remain a residual risk. A short “what a liquidity hook cannot see” section would be more useful than another `beforeSwap` tutorial.
 
 ### 5. Small docs/tooling nicks
 
@@ -59,7 +59,7 @@ Related: because our lock is a flag (NFT stays with the borrower), any unwind pa
 1. **Page or callout: “Hooks are on the pool, not the NFT.”** Include: you cannot retrofit a hook onto an existing pool; `ISubscriber` is not a lock; collateral products need their own `initialize`.
 2. **Liquidity-hook example in the template** (even a 30-line `beforeRemoveLiquidity`) that mints via PositionManager and logs `params.salt` / `liquidityDelta`.
 3. **`PositionInfo` field list** that states mint time is *not* stored, and points at the ERC-721 `Transfer` mint log if you need age.
-4. **Collateral / custody note:** PositionManager `approve` + `transferFrom` are standard ERC-721; they are revocable; a hook does not observe approval.
+4. **Collateral / custody note:** PositionManager `approve` + `transferFrom` are standard ERC-721; they are revocable; a hook does not observe approval. Products that need default-proof collateral have to custody the NFT (Veilend pulls it at `lockPosition`), not rely on a leftover approval.
 5. Keep HookMiner + v4-template as the default path. That part is already good.
 
 We would send reviewers to this file at the repo root: [`FEEDBACK.md`](FEEDBACK.md).
