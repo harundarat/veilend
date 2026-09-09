@@ -1,9 +1,11 @@
 {
-  "name": "hello-confidential-workflows-workflow",
+  "name": "credit-scoring-workflow",
   "version": "1.0.0",
   "main": "dist/main.js",
   "private": true,
+  "type": "module",
   "scripts": {
+    "postinstall": "bunx cre-setup",
     "typecheck": "tsc --noEmit"
   },
   "license": "UNLICENSED",
