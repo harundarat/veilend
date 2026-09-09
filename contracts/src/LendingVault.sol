@@ -75,7 +75,6 @@ contract LendingVault {
     error AlreadyLiquidated();
     error PastDeadline();
     error DeadlineNotPassed();
-    error SeizeFailed();
     error NftNotInVault();
     error NftTransferFailed();
     error NotSeized();
@@ -221,14 +220,9 @@ contract LendingVault {
         if (block.timestamp <= loan.defaultDeadline) revert DeadlineNotPassed();
 
         IERC721 nft = IERC721(address(positionManager));
+        if (nft.ownerOf(positionId) != address(this)) revert NftNotInVault();
+
         address borrower = loan.borrower;
-        if (nft.ownerOf(positionId) != borrower) revert NotPositionOwner();
-
-        try nft.transferFrom(borrower, address(this), positionId) {}
-        catch {
-            revert SeizeFailed();
-        }
-
         loan.active = false;
         loan.locked = false;
         loan.liquidated = true;
