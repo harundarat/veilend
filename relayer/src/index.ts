@@ -132,6 +132,18 @@ async function enqueueRange(ctx: RelayerContext, fromBlock: bigint, toBlock: big
   }
 }
 
+async function pollTick(
+  ctx: RelayerContext,
+  cursor: bigint,
+): Promise<{ remaining: number; cursor: bigint }> {
+  const head = await ctx.publicClient.getBlockNumber()
+  if (head > cursor) {
+    await enqueueRange(ctx, cursor + 1n, head)
+  }
+  const remaining = await ctx.queue.drain((event) => handlePositionLocked(event, ctx))
+  return { remaining, cursor: ctx.queue.cursor(head) }
+}
+
 function startWatch(ctx: RelayerContext): () => void {
   return ctx.publicClient.watchContractEvent({
     address: ctx.config.vaultAddress,
@@ -195,9 +207,14 @@ async function main(): Promise<void> {
     log("watching PositionLocked via WebSocket; getLogs poll is the backstop")
   }
 
-  await enqueueRange(ctx, fromBlock, await publicClient.getBlockNumber())
+  const backfillTo = await publicClient.getBlockNumber()
+  await enqueueRange(ctx, fromBlock, backfillTo)
   let remaining = await ctx.queue.drain((event) => handlePositionLocked(event, ctx))
-  let cursor = ctx.queue.cursor(await publicClient.getBlockNumber())
+  let cursor = ctx.queue.cursor(backfillTo)
+
+  const caughtUp = await pollTick(ctx, cursor)
+  remaining = caughtUp.remaining
+  cursor = caughtUp.cursor
 
   if (args.once) {
     if (remaining > 0) {
@@ -210,14 +227,19 @@ async function main(): Promise<void> {
   try {
     for (;;) {
       await Bun.sleep(config.pollIntervalMs)
-      const head = await publicClient.getBlockNumber()
-      if (head > cursor) {
-        await enqueueRange(ctx, cursor + 1n, head)
-      }
-      remaining = await ctx.queue.drain((event) => handlePositionLocked(event, ctx))
-      cursor = ctx.queue.cursor(head)
-      if (remaining > 0) {
-        log("pending PositionLocked", { remaining, cursor: cursor.toString() })
+      try {
+        const tick = await pollTick(ctx, cursor)
+        remaining = tick.remaining
+        cursor = tick.cursor
+        if (remaining > 0) {
+          log("pending PositionLocked", { remaining, cursor: cursor.toString() })
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        console.error("getLogs poll failed; retrying from cursor", {
+          cursor: cursor.toString(),
+          error: message,
+        })
       }
     }
   } finally {
