@@ -6,17 +6,23 @@ import {
   webSocket,
   type Account,
   type Chain,
-  type Hex,
   type PublicClient,
   type Transport,
   type WalletClient,
 } from "viem"
 import { privateKeyToAccount } from "viem/accounts"
+import { lendingVaultAbi } from "./abi"
 import { loadConfig, parseCliArgs, type CliArgs, type RelayerConfig } from "./config"
 import { parseTerms } from "./parse-terms"
+import { PendingQueue, type HandleOutcome } from "./queue"
 import { runCreSimulate } from "./simulate"
 import { loanIsActive, submitCreditReport } from "./submit"
-import { fetchPositionLocked, rpcUsesWebSocket, type PositionLockedEvent } from "./watch"
+import {
+  fetchPositionLocked,
+  rpcUsesWebSocket,
+  toPositionLockedEvent,
+  type PositionLockedEvent,
+} from "./watch"
 
 type RelayerContext = {
   config: RelayerConfig
@@ -24,13 +30,7 @@ type RelayerContext = {
   publicClient: PublicClient
   walletClient: WalletClient<Transport, Chain, Account>
   account: Account
-}
-
-const inFlight = new Set<string>()
-const seen = new Set<string>()
-
-function eventKey(event: PositionLockedEvent): string {
-  return event.positionId.toString()
+  queue: PendingQueue
 }
 
 function log(message: string, extra?: Record<string, unknown>): void {
@@ -76,42 +76,22 @@ async function loadTermsStdout(event: PositionLockedEvent, ctx: RelayerContext):
   return result.stdout
 }
 
-async function handlePositionLocked(event: PositionLockedEvent, ctx: RelayerContext): Promise<void> {
-  const key = eventKey(event)
-  if (seen.has(key) || inFlight.has(key)) {
-    log("skip duplicate PositionLocked", { positionId: key })
-    return
-  }
-  inFlight.add(key)
+async function handlePositionLocked(event: PositionLockedEvent, ctx: RelayerContext): Promise<HandleOutcome> {
+  const positionId = event.positionId.toString()
   try {
     log("PositionLocked", {
       borrower: event.borrower,
-      positionId: key,
+      positionId,
       timestamp: event.timestamp.toString(),
       tx: event.transactionHash,
       block: event.blockNumber.toString(),
     })
     if (await loanIsActive({ client: ctx.publicClient, vault: ctx.config.vaultAddress, positionId: event.positionId })) {
-      log("skip already reported position", { positionId: key })
-      seen.add(key)
-      return
+      log("skip already reported position", { positionId })
+      return "done"
     }
-    let stdout: string
-    try {
-      stdout = await loadTermsStdout(event, ctx)
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      console.error("CRE simulate failed; not submitting", { positionId: key, error: message })
-      return
-    }
-    let terms
-    try {
-      terms = parseTerms(stdout)
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      console.error("failed to parse CRE terms; not submitting", { positionId: key, error: message })
-      return
-    }
+    const stdout = await loadTermsStdout(event, ctx)
+    const terms = parseTerms(stdout)
     log("parsed terms", {
       ltvBps: terms.ltvBps.toString(),
       aprBps: terms.aprBps.toString(),
@@ -132,16 +112,15 @@ async function handlePositionLocked(event: PositionLockedEvent, ctx: RelayerCont
       expiry: submitted.expiry.toString(),
       principal: submitted.principal?.toString(),
     })
-    seen.add(key)
+    return "done"
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
-    console.error("failed to process PositionLocked", { positionId: key, error: message })
-  } finally {
-    inFlight.delete(key)
+    console.error("failed to process PositionLocked; will retry", { positionId, error: message })
+    return "retry"
   }
 }
 
-async function processRange(ctx: RelayerContext, fromBlock: bigint, toBlock: bigint): Promise<bigint> {
+async function enqueueRange(ctx: RelayerContext, fromBlock: bigint, toBlock: bigint): Promise<void> {
   const events = await fetchPositionLocked({
     client: ctx.publicClient,
     vault: ctx.config.vaultAddress,
@@ -149,9 +128,31 @@ async function processRange(ctx: RelayerContext, fromBlock: bigint, toBlock: big
     toBlock,
   })
   for (const event of events) {
-    await handlePositionLocked(event, ctx)
+    ctx.queue.enqueue(event)
   }
-  return toBlock
+}
+
+function startWatch(ctx: RelayerContext): () => void {
+  return ctx.publicClient.watchContractEvent({
+    address: ctx.config.vaultAddress,
+    abi: lendingVaultAbi,
+    eventName: "PositionLocked",
+    onLogs: (logs) => {
+      for (const item of logs) {
+        ctx.queue.enqueue(toPositionLockedEvent(item))
+      }
+      void ctx.queue.drain((event) => handlePositionLocked(event, ctx)).then((remaining) => {
+        if (remaining > 0) {
+          log("pending PositionLocked after watch drain", { remaining })
+        }
+      })
+    },
+    onError: (error) => {
+      console.error("PositionLocked watch error; getLogs poll continues", {
+        error: error instanceof Error ? error.message : String(error),
+      })
+    },
+  })
 }
 
 async function main(): Promise<void> {
@@ -167,7 +168,14 @@ async function main(): Promise<void> {
     chain,
     transport,
   })
-  const ctx: RelayerContext = { config, args, publicClient, walletClient, account }
+  const ctx: RelayerContext = {
+    config,
+    args,
+    publicClient,
+    walletClient,
+    account,
+    queue: new PendingQueue(),
+  }
   const latest = await publicClient.getBlockNumber()
   const fromBlock = args.fromBlock ?? latest
 
@@ -181,56 +189,39 @@ async function main(): Promise<void> {
     termsFile: args.termsFile,
   })
 
+  let unwatch: (() => void) | undefined
+  if (!args.once && rpcUsesWebSocket(config.rpcUrl)) {
+    unwatch = startWatch(ctx)
+    log("watching PositionLocked via WebSocket; getLogs poll is the backstop")
+  }
+
+  await enqueueRange(ctx, fromBlock, await publicClient.getBlockNumber())
+  let remaining = await ctx.queue.drain((event) => handlePositionLocked(event, ctx))
+  let cursor = ctx.queue.cursor(await publicClient.getBlockNumber())
+
   if (args.once) {
-    await processRange(ctx, fromBlock, latest)
+    if (remaining > 0) {
+      throw new Error(`unprocessed PositionLocked: ${remaining}`)
+    }
     return
   }
 
-  if (rpcUsesWebSocket(config.rpcUrl)) {
-    await processRange(ctx, fromBlock, latest)
-    publicClient.watchContractEvent({
-      address: config.vaultAddress,
-      abi: [
-        {
-          type: "event",
-          name: "PositionLocked",
-          inputs: [
-            { name: "borrower", type: "address", indexed: true },
-            { name: "positionId", type: "uint256", indexed: true },
-            { name: "timestamp", type: "uint256", indexed: false },
-          ],
-        },
-      ],
-      eventName: "PositionLocked",
-      onLogs: (logs) => {
-        void (async () => {
-          for (const logItem of logs) {
-            await handlePositionLocked(
-              {
-                borrower: logItem.args.borrower as Hex,
-                positionId: logItem.args.positionId as bigint,
-                timestamp: logItem.args.timestamp as bigint,
-                blockNumber: logItem.blockNumber ?? 0n,
-                transactionHash: logItem.transactionHash ?? "0x",
-                logIndex: logItem.logIndex ?? 0,
-              },
-              ctx,
-            )
-          }
-        })()
-      },
-    })
-    log("watching PositionLocked via WebSocket")
-    await new Promise(() => undefined)
-  }
-
-  log("polling PositionLocked", { intervalMs: config.pollIntervalMs })
-  let cursor = await processRange(ctx, fromBlock, latest)
-  for (;;) {
-    await Bun.sleep(config.pollIntervalMs)
-    const head = await publicClient.getBlockNumber()
-    if (head <= cursor) continue
-    cursor = await processRange(ctx, cursor + 1n, head)
+  log("polling PositionLocked", { intervalMs: config.pollIntervalMs, cursor: cursor.toString() })
+  try {
+    for (;;) {
+      await Bun.sleep(config.pollIntervalMs)
+      const head = await publicClient.getBlockNumber()
+      if (head > cursor) {
+        await enqueueRange(ctx, cursor + 1n, head)
+      }
+      remaining = await ctx.queue.drain((event) => handlePositionLocked(event, ctx))
+      cursor = ctx.queue.cursor(head)
+      if (remaining > 0) {
+        log("pending PositionLocked", { remaining, cursor: cursor.toString() })
+      }
+    }
+  } finally {
+    unwatch?.()
   }
 }
 

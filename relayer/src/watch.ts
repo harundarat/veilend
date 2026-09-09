@@ -13,7 +13,7 @@ export function rpcUsesWebSocket(rpcUrl: string): boolean {
   return rpcUrl.startsWith("ws://") || rpcUrl.startsWith("wss://")
 }
 
-const positionLockedEvent = {
+export const positionLockedEvent = {
   type: "event",
   name: "PositionLocked",
   inputs: [
@@ -22,6 +22,22 @@ const positionLockedEvent = {
     { name: "timestamp", type: "uint256", indexed: false },
   ],
 } as const
+
+export function toPositionLockedEvent(log: {
+  args: { borrower?: Address; positionId?: bigint; timestamp?: bigint }
+  blockNumber: bigint | null
+  transactionHash: `0x${string}` | null
+  logIndex: number | null
+}): PositionLockedEvent {
+  return {
+    borrower: log.args.borrower as Address,
+    positionId: log.args.positionId as bigint,
+    timestamp: log.args.timestamp as bigint,
+    blockNumber: log.blockNumber ?? 0n,
+    transactionHash: log.transactionHash ?? "0x",
+    logIndex: log.logIndex ?? 0,
+  }
+}
 
 export async function fetchPositionLocked(params: {
   client: PublicClient
@@ -35,12 +51,5 @@ export async function fetchPositionLocked(params: {
     fromBlock: params.fromBlock,
     toBlock: params.toBlock,
   })
-  return logs.map((log) => ({
-    borrower: log.args.borrower as Address,
-    positionId: log.args.positionId as bigint,
-    timestamp: log.args.timestamp as bigint,
-    blockNumber: log.blockNumber ?? 0n,
-    transactionHash: log.transactionHash ?? "0x",
-    logIndex: log.logIndex ?? 0,
-  }))
+  return logs.map((log) => toPositionLockedEvent(log))
 }
