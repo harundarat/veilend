@@ -11,6 +11,7 @@ const makeConfig = (): Config => ({
 	secretId: 'API_TOKEN',
 	rpcUrl: 'https://ethereum-sepolia-rpc.publicnode.com',
 	positionManager: '0x429ba70129df741B2Ca2a85BC3A2a3328e5c09b4',
+	logsFromBlock: '0xb1e000',
 	wallets: {
 		'0xB34a4eAECB848d573a0410bc305787d5B69328B8': {
 			pastLoansCount: 8,
@@ -89,7 +90,21 @@ describe('onHttpTrigger', () => {
 		expect(Object.keys(terms).sort()).toEqual(['aprBps', 'expiry', 'ltvBps'])
 		expect(logs.join('\n')).toContain('terms computed')
 		expect(logs.join('\n')).toContain('dataSource=config')
+		expect(logs.join('\n')).toContain('onchain lp read failed')
 		expect(logs.join('\n')).not.toContain(API_TOKEN)
+	})
+
+	test('throws when on-chain read fails and positionId has no config fallback', () => {
+		const { runtime } = makeFakeTeeRuntime()
+		expect(() =>
+			onHttpTrigger(
+				runtime,
+				makePayload({
+					borrower: '0xB34a4eAECB848d573a0410bc305787d5B69328B8',
+					positionId: '999',
+				}),
+			),
+		).toThrow('no lp fallback')
 	})
 })
 

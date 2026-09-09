@@ -1,13 +1,7 @@
 import { cre, decodeJson, type HTTPPayload, type TeeRuntime } from '@chainlink/cre-sdk'
 import { z } from 'zod'
 import { readOnchainPosition } from './position-data'
-import {
-	CAP_LIQUIDITY,
-	lookupHistory,
-	scoreToTerms,
-	type CreditTerms,
-	type HistoryProfile,
-} from './scoring'
+import { lookupHistory, scoreToTerms, type CreditTerms, type HistoryProfile } from './scoring'
 
 const historyProfileSchema = z.object({
 	pastLoansCount: z.number(),
@@ -29,6 +23,7 @@ export const configSchema = z.object({
 	secretId: z.string(),
 	rpcUrl: z.string(),
 	positionManager: z.string(),
+	logsFromBlock: z.string(),
 	wallets: z.record(historyProfileSchema),
 	demoPositions: z.record(demoPositionSchema),
 })
@@ -37,7 +32,14 @@ export type Config = z.infer<typeof configSchema>
 export type LpInputs = {
 	liquidity: number
 	positionAgeDays: number
-	dataSource: 'onchain' | 'config' | 'default'
+	dataSource: 'onchain' | 'config'
+}
+
+function onchainFailureReason(error: unknown): string {
+	if (error instanceof Error && error.message.length > 0) {
+		return error.message.slice(0, 120)
+	}
+	return 'onchain read failed'
 }
 
 export function resolveLpInputs(
@@ -48,19 +50,16 @@ export function resolveLpInputs(
 	try {
 		const onchain = readOnchainPosition(runtime, positionId, nowSec)
 		return { ...onchain, dataSource: 'onchain' }
-	} catch {
+	} catch (error) {
+		runtime.log(`onchain lp read failed: ${onchainFailureReason(error)}`)
 		const demo = runtime.config.demoPositions[positionId]
-		if (demo) {
-			return {
-				liquidity: demo.liquidity,
-				positionAgeDays: (nowSec - demo.mintTimestamp) / 86400,
-				dataSource: 'config',
-			}
+		if (!demo) {
+			throw new Error(`no lp fallback for positionId ${positionId}`)
 		}
 		return {
-			liquidity: CAP_LIQUIDITY / 2,
-			positionAgeDays: 30,
-			dataSource: 'default',
+			liquidity: demo.liquidity,
+			positionAgeDays: (nowSec - demo.mintTimestamp) / 86400,
+			dataSource: 'config',
 		}
 	}
 }

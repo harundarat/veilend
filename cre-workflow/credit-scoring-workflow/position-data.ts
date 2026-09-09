@@ -13,7 +13,10 @@ import { CAP_LIQUIDITY } from './scoring'
 type RpcConfig = {
 	rpcUrl: string
 	positionManager: string
+	logsFromBlock: string
 }
+
+const LOG_CHUNK_BLOCKS = 40_000n
 
 const POSITION_ABI = parseAbi([
 	'function getPositionLiquidity(uint256 tokenId) view returns (uint128 liquidity)',
@@ -56,6 +59,39 @@ function jsonRpc(runtime: TeeRuntime<RpcConfig>, method: string, params: unknown
 	return parsed.result
 }
 
+function toHexBlock(block: bigint): `0x${string}` {
+	return `0x${block.toString(16)}`
+}
+
+function readMintLogs(runtime: TeeRuntime<RpcConfig>, tokenId: bigint): LogEntry[] {
+	const fromBlock = BigInt(runtime.config.logsFromBlock)
+	const latestRaw = jsonRpc(runtime, 'eth_blockNumber', [])
+	if (typeof latestRaw !== 'string') {
+		throw new Error('latest block missing')
+	}
+	const latestBlock = BigInt(latestRaw)
+	const topic3 = pad(numberToHex(tokenId), { size: 32 })
+
+	for (let start = fromBlock; start <= latestBlock; start += LOG_CHUNK_BLOCKS) {
+		let end = start + LOG_CHUNK_BLOCKS - 1n
+		if (end > latestBlock) {
+			end = latestBlock
+		}
+		const logs = jsonRpc(runtime, 'eth_getLogs', [
+			{
+				address: runtime.config.positionManager,
+				fromBlock: toHexBlock(start),
+				toBlock: toHexBlock(end),
+				topics: [TRANSFER_TOPIC, ZERO_TOPIC, null, topic3],
+			},
+		])
+		if (Array.isArray(logs) && logs.length > 0) {
+			return logs as LogEntry[]
+		}
+	}
+	throw new Error('mint log not found')
+}
+
 function liquidityToScoreInput(liquidity: bigint): number {
 	if (liquidity >= BigInt(CAP_LIQUIDITY)) {
 		return CAP_LIQUIDITY
@@ -89,19 +125,8 @@ export function readOnchainPosition(
 		data: callResult as `0x${string}`,
 	})
 
-	const logs = jsonRpc(runtime, 'eth_getLogs', [
-		{
-			address: runtime.config.positionManager,
-			fromBlock: '0x0',
-			toBlock: 'latest',
-			topics: [TRANSFER_TOPIC, ZERO_TOPIC, null, pad(numberToHex(tokenId), { size: 32 })],
-		},
-	])
-	if (!Array.isArray(logs) || logs.length === 0) {
-		throw new Error('mint log not found')
-	}
-
-	const mintLog = logs[0] as LogEntry
+	const logs = readMintLogs(runtime, tokenId)
+	const mintLog = logs[0]
 	if (!mintLog.blockNumber) {
 		throw new Error('mint log missing block')
 	}
