@@ -4,8 +4,10 @@ pragma solidity ^0.8.26;
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import {IPositionManager} from "@uniswap/v4-periphery/src/interfaces/IPositionManager.sol";
+import {Actions} from "@uniswap/v4-periphery/src/libraries/Actions.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {PoolId} from "@uniswap/v4-core/src/types/PoolId.sol";
+import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
 
 import {ICollateralLockHook} from "./interfaces/ICollateralLockHook.sol";
 
@@ -54,6 +56,7 @@ contract LendingVault {
     event RelayerUpdated(address indexed relayer);
     event LoanRepaid(address indexed borrower, uint256 indexed positionId, uint256 repayAmount);
     event LoanLiquidated(uint256 indexed positionId, address indexed liquidator, address indexed borrower);
+    event SeizedLiquidityWithdrawn(uint256 indexed positionId, uint256 amount0, uint256 amount1);
 
     error NotRelayer();
     error NotOwner();
@@ -72,11 +75,11 @@ contract LendingVault {
     error PastDeadline();
     error DeadlineNotPassed();
     error SeizeFailed();
+    error NotSeized();
     error InvalidLtv();
     error InvalidApr();
     error InvalidExpiry();
     error InsufficientLiquidity();
-    error NotImplemented();
 
     modifier onlyOwner() {
         if (msg.sender != owner) revert NotOwner();
@@ -181,9 +184,9 @@ contract LendingVault {
     function repayLoan(uint256 positionId) external {
         Loan storage loan = loans[positionId];
         if (msg.sender != loan.borrower) revert NotBorrower();
-        if (!loan.active || loan.principal == 0) revert LoanNotActive();
         if (loan.repaid) revert AlreadyRepaid();
         if (loan.liquidated) revert AlreadyLiquidated();
+        if (!loan.active || loan.principal == 0) revert LoanNotActive();
         if (block.timestamp > loan.defaultDeadline) revert PastDeadline();
 
         uint256 repayAmount = loan.principal + (loan.principal * loan.aprBps / BPS_DENOMINATOR);
@@ -221,8 +224,36 @@ contract LendingVault {
         emit LoanLiquidated(positionId, msg.sender, borrower);
     }
 
-    function withdrawSeizedLiquidity(uint256) external pure {
-        revert NotImplemented();
+    function withdrawSeizedLiquidity(uint256 positionId) external {
+        Loan storage loan = loans[positionId];
+        if (!loan.liquidated) revert NotSeized();
+
+        IERC721 nft = IERC721(address(positionManager));
+        try nft.ownerOf(positionId) returns (address nftOwner) {
+            if (nftOwner != address(this)) revert NotSeized();
+        } catch {
+            revert NotSeized();
+        }
+
+        (PoolKey memory poolKey,) = positionManager.getPoolAndPositionInfo(positionId);
+        Currency currency0 = poolKey.currency0;
+        Currency currency1 = poolKey.currency1;
+
+        uint256 balance0Before = currency0.balanceOf(address(this));
+        uint256 balance1Before = currency1.balanceOf(address(this));
+
+        bytes[] memory params = new bytes[](2);
+        params[0] = abi.encode(positionId, uint128(0), uint128(0), bytes(""));
+        params[1] = abi.encode(currency0, currency1, address(this));
+
+        positionManager.modifyLiquidities(
+            abi.encode(abi.encodePacked(uint8(Actions.BURN_POSITION), uint8(Actions.TAKE_PAIR)), params),
+            block.timestamp
+        );
+
+        uint256 amount0 = currency0.balanceOf(address(this)) - balance0Before;
+        uint256 amount1 = currency1.balanceOf(address(this)) - balance1Before;
+        emit SeizedLiquidityWithdrawn(positionId, amount0, amount1);
     }
 
     function getLoan(uint256 positionId) external view returns (Loan memory) {
