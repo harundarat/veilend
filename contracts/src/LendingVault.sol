@@ -53,6 +53,7 @@ contract LendingVault {
     );
     event RelayerUpdated(address indexed relayer);
     event LoanRepaid(address indexed borrower, uint256 indexed positionId, uint256 repayAmount);
+    event LoanLiquidated(uint256 indexed positionId, address indexed liquidator, address indexed borrower);
 
     error NotRelayer();
     error NotOwner();
@@ -69,6 +70,8 @@ contract LendingVault {
     error AlreadyRepaid();
     error AlreadyLiquidated();
     error PastDeadline();
+    error DeadlineNotPassed();
+    error SeizeFailed();
     error InvalidLtv();
     error InvalidApr();
     error InvalidExpiry();
@@ -194,8 +197,28 @@ contract LendingVault {
         emit LoanRepaid(msg.sender, positionId, repayAmount);
     }
 
-    function liquidate(uint256) external pure {
-        revert NotImplemented();
+    function liquidate(uint256 positionId) external {
+        Loan storage loan = loans[positionId];
+        if (!loan.active || loan.principal == 0) revert LoanNotActive();
+        if (loan.repaid) revert AlreadyRepaid();
+        if (loan.liquidated) revert AlreadyLiquidated();
+        if (block.timestamp <= loan.defaultDeadline) revert DeadlineNotPassed();
+
+        IERC721 nft = IERC721(address(positionManager));
+        address borrower = loan.borrower;
+        if (nft.ownerOf(positionId) != borrower) revert NotPositionOwner();
+
+        try nft.transferFrom(borrower, address(this), positionId) {}
+        catch {
+            revert SeizeFailed();
+        }
+
+        loan.active = false;
+        loan.locked = false;
+        loan.liquidated = true;
+
+        hook.unlockPosition(positionId);
+        emit LoanLiquidated(positionId, msg.sender, borrower);
     }
 
     function withdrawSeizedLiquidity(uint256) external pure {
