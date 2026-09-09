@@ -62,6 +62,8 @@ contract LendingVault {
     error LoanNotLocked();
     error LoanAlreadyActive();
     error InvalidLtv();
+    error InvalidApr();
+    error InvalidExpiry();
     error InsufficientLiquidity();
     error NotImplemented();
 
@@ -201,6 +203,8 @@ contract LendingVault {
         if (!loan.locked || loan.borrower != borrower) revert LoanNotLocked();
         if (loan.active) revert LoanAlreadyActive();
         if (ltvBps == 0 || ltvBps > BPS_DENOMINATOR) revert InvalidLtv();
+        if (aprBps > BPS_DENOMINATOR) revert InvalidApr();
+        if (expiry <= block.timestamp) revert InvalidExpiry();
 
         uint256 collateralValue = _collateralValue(positionId, amount0Snapshot, amount1Snapshot);
         uint256 principal = collateralValue * ltvBps / BPS_DENOMINATOR;
