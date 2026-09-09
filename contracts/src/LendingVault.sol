@@ -76,6 +76,7 @@ contract LendingVault {
     error PastDeadline();
     error DeadlineNotPassed();
     error SeizeFailed();
+    error NftNotInVault();
     error NftTransferFailed();
     error NotSeized();
     error InvalidLtv();
@@ -200,11 +201,15 @@ contract LendingVault {
         uint256 repayAmount = loan.principal + (loan.principal * loan.aprBps / BPS_DENOMINATOR);
         if (!loanToken.transferFrom(msg.sender, address(this), repayAmount)) revert InsufficientLiquidity();
 
+        IERC721 nft = IERC721(address(positionManager));
+        if (nft.ownerOf(positionId) != address(this)) revert NftNotInVault();
+
         loan.active = false;
         loan.locked = false;
         loan.repaid = true;
 
         hook.unlockPosition(positionId);
+        nft.safeTransferFrom(address(this), loan.borrower, positionId);
         emit LoanRepaid(msg.sender, positionId, repayAmount);
     }
 
