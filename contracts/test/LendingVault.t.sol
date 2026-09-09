@@ -96,6 +96,29 @@ contract LendingVaultTest is Test {
         vault.lockPosition(POSITION_ID);
     }
 
+    function _lockAndReport() internal returns (uint256 principal, uint256 expiry, uint256 aprBps) {
+        _approveAndLock();
+        uint256 ltvBps = 5000;
+        aprBps = 1000;
+        expiry = block.timestamp + 1 days;
+        principal = uint256(LIQUIDITY) * ltvBps / 10_000;
+        vm.prank(relayer);
+        vault.submitCreditReport(borrower, POSITION_ID, ltvBps, aprBps, expiry);
+    }
+
+    function _repayAmount(uint256 principal, uint256 aprBps) internal pure returns (uint256) {
+        return principal + (principal * aprBps / 10_000);
+    }
+
+    function _fundAndApproveRepay(uint256 repayAmount) internal {
+        uint256 have = mockStable.balanceOf(borrower);
+        if (have < repayAmount) {
+            mockStable.mint(borrower, repayAmount - have);
+        }
+        vm.prank(borrower);
+        mockStable.approve(address(vault), repayAmount);
+    }
+
     function test_lockPosition_succeeds() public {
         vm.prank(borrower);
         positionManager.approve(address(vault), POSITION_ID);
@@ -291,8 +314,95 @@ contract LendingVaultTest is Test {
         assertEq(vault.getLoan(POSITION_ID).collateralValue, uint256(LIQUIDITY));
     }
 
-    function test_repayLoan_revertsNotImplemented() public {
-        vm.expectRevert(LendingVault.NotImplemented.selector);
+    function test_repayLoan_pullsFlatInterestAndUnlocks() public {
+        (uint256 principal, , uint256 aprBps) = _lockAndReport();
+        uint256 repayAmount = _repayAmount(principal, aprBps);
+        _fundAndApproveRepay(repayAmount);
+
+        uint256 vaultBefore = mockStable.balanceOf(address(vault));
+
+        vm.expectEmit(true, true, false, true, address(vault));
+        emit LendingVault.LoanRepaid(borrower, POSITION_ID, repayAmount);
+
+        vm.prank(borrower);
+        vault.repayLoan(POSITION_ID);
+
+        assertEq(mockStable.balanceOf(address(vault)), vaultBefore + repayAmount);
+        assertFalse(vault.locked(POSITION_ID));
+        assertFalse(hook.isLocked(POSITION_ID));
+
+        LendingVault.Loan memory loan = vault.getLoan(POSITION_ID);
+        assertFalse(loan.active);
+        assertFalse(loan.locked);
+        assertTrue(loan.repaid);
+        assertFalse(loan.liquidated);
+        assertEq(loan.principal, principal);
+    }
+
+    function test_repayLoan_revertsWithoutStableApproval() public {
+        (uint256 principal, , uint256 aprBps) = _lockAndReport();
+        uint256 repayAmount = _repayAmount(principal, aprBps);
+        uint256 have = mockStable.balanceOf(borrower);
+        if (have < repayAmount) {
+            mockStable.mint(borrower, repayAmount - have);
+        }
+
+        vm.prank(borrower);
+        vm.expectRevert();
+        vault.repayLoan(POSITION_ID);
+    }
+
+    function test_repayLoan_revertsIfAlreadyRepaid() public {
+        (uint256 principal, , uint256 aprBps) = _lockAndReport();
+        uint256 repayAmount = _repayAmount(principal, aprBps);
+        _fundAndApproveRepay(repayAmount);
+
+        vm.prank(borrower);
+        vault.repayLoan(POSITION_ID);
+
+        _fundAndApproveRepay(repayAmount);
+        vm.prank(borrower);
+        vm.expectRevert(LendingVault.LoanNotActive.selector);
+        vault.repayLoan(POSITION_ID);
+    }
+
+    function test_repayLoan_revertsBeforeReport() public {
+        _approveAndLock();
+        vm.prank(borrower);
+        vm.expectRevert(LendingVault.LoanNotActive.selector);
+        vault.repayLoan(POSITION_ID);
+    }
+
+    function test_repayLoan_revertsForNonBorrower() public {
+        (uint256 principal, , uint256 aprBps) = _lockAndReport();
+        uint256 repayAmount = _repayAmount(principal, aprBps);
+        _fundAndApproveRepay(repayAmount);
+
+        vm.prank(attacker);
+        vm.expectRevert(LendingVault.NotBorrower.selector);
+        vault.repayLoan(POSITION_ID);
+    }
+
+    function test_repayLoan_succeedsOnDefaultDeadline() public {
+        (uint256 principal, uint256 expiry, uint256 aprBps) = _lockAndReport();
+        uint256 repayAmount = _repayAmount(principal, aprBps);
+        _fundAndApproveRepay(repayAmount);
+
+        vm.warp(expiry + vault.GRACE_PERIOD());
+        vm.prank(borrower);
+        vault.repayLoan(POSITION_ID);
+
+        assertTrue(vault.getLoan(POSITION_ID).repaid);
+    }
+
+    function test_repayLoan_revertsAfterDefaultDeadline() public {
+        (uint256 principal, uint256 expiry, uint256 aprBps) = _lockAndReport();
+        uint256 repayAmount = _repayAmount(principal, aprBps);
+        _fundAndApproveRepay(repayAmount);
+
+        vm.warp(expiry + vault.GRACE_PERIOD() + 1);
+        vm.prank(borrower);
+        vm.expectRevert(LendingVault.PastDeadline.selector);
         vault.repayLoan(POSITION_ID);
     }
 

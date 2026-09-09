@@ -233,10 +233,54 @@ contract VeilendIntegrationTest is BaseTest {
         assertEq(IERC721(address(positionManager)).ownerOf(tokenId), address(this));
     }
 
+    function test_repayLoan_unlocksAndAllowsDecrease() public {
+        _approveAndLock();
+
+        uint256 ltvBps = 5000;
+        uint256 aprBps = 1000;
+        uint256 expiry = block.timestamp + 1 days;
+        uint256 principal = uint256(LIQUIDITY_AMOUNT) * ltvBps / 10_000;
+        uint256 repayAmount = principal + (principal * aprBps / 10_000);
+
+        vm.prank(relayer);
+        vault.submitCreditReport(address(this), tokenId, ltvBps, aprBps, expiry);
+
+        this.decreaseLiquidityExpectLocked(tokenId, 1e18);
+
+        loanToken.mint(address(this), principal * aprBps / 10_000);
+        loanToken.approve(address(vault), repayAmount);
+
+        uint256 vaultBefore = loanToken.balanceOf(address(vault));
+        vault.repayLoan(tokenId);
+        assertEq(loanToken.balanceOf(address(vault)), vaultBefore + repayAmount);
+        assertFalse(hook.isLocked(tokenId));
+        assertFalse(vault.locked(tokenId));
+        assertTrue(vault.getLoan(tokenId).repaid);
+
+        uint128 beforeLiq = positionManager.getPositionLiquidity(tokenId);
+        positionManager.decreaseLiquidity(
+            tokenId, 1e18, 0, 0, address(this), block.timestamp, Constants.ZERO_BYTES
+        );
+        assertEq(positionManager.getPositionLiquidity(tokenId), beforeLiq - 1e18);
+    }
+
     function decreaseLiquidity(uint256 id, uint256 liquidityToRemove) external {
         positionManager.decreaseLiquidity(
             id, liquidityToRemove, 0, 0, address(this), block.timestamp, Constants.ZERO_BYTES
         );
+    }
+
+    function decreaseLiquidityExpectLocked(uint256 id, uint256 liquidityToRemove) external {
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                CustomRevert.WrappedError.selector,
+                address(hook),
+                IHooks.beforeRemoveLiquidity.selector,
+                abi.encodeWithSelector(CollateralLockHook.PositionLocked.selector, id),
+                abi.encodeWithSelector(Hooks.HookCallFailed.selector)
+            )
+        );
+        this.decreaseLiquidity(id, liquidityToRemove);
     }
 
     function _approveAndLock() internal {
