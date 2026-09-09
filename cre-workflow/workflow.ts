@@ -1,5 +1,6 @@
 import { cre, decodeJson, type HTTPPayload, type TeeRuntime } from '@chainlink/cre-sdk'
 import { z } from 'zod'
+import { readOnchainPosition } from './position-data'
 import {
 	CAP_LIQUIDITY,
 	lookupHistory,
@@ -26,6 +27,8 @@ export const configSchema = z.object({
 		}),
 	),
 	secretId: z.string(),
+	rpcUrl: z.string(),
+	positionManager: z.string(),
 	wallets: z.record(historyProfileSchema),
 	demoPositions: z.record(demoPositionSchema),
 })
@@ -34,22 +37,31 @@ export type Config = z.infer<typeof configSchema>
 export type LpInputs = {
 	liquidity: number
 	positionAgeDays: number
-	dataSource: 'config' | 'default'
+	dataSource: 'onchain' | 'config' | 'default'
 }
 
-export function resolveLpInputs(config: Config, positionId: string, nowSec: number): LpInputs {
-	const demo = config.demoPositions[positionId]
-	if (demo) {
-		return {
-			liquidity: demo.liquidity,
-			positionAgeDays: (nowSec - demo.mintTimestamp) / 86400,
-			dataSource: 'config',
+export function resolveLpInputs(
+	runtime: TeeRuntime<Config>,
+	positionId: string,
+	nowSec: number,
+): LpInputs {
+	try {
+		const onchain = readOnchainPosition(runtime, positionId, nowSec)
+		return { ...onchain, dataSource: 'onchain' }
+	} catch {
+		const demo = runtime.config.demoPositions[positionId]
+		if (demo) {
+			return {
+				liquidity: demo.liquidity,
+				positionAgeDays: (nowSec - demo.mintTimestamp) / 86400,
+				dataSource: 'config',
+			}
 		}
-	}
-	return {
-		liquidity: CAP_LIQUIDITY / 2,
-		positionAgeDays: 30,
-		dataSource: 'default',
+		return {
+			liquidity: CAP_LIQUIDITY / 2,
+			positionAgeDays: 30,
+			dataSource: 'default',
+		}
 	}
 }
 
@@ -84,7 +96,7 @@ export const onHttpTrigger = (runtime: TeeRuntime<Config>, payload: HTTPPayload)
 
 	const history = lookupHistory(request.borrower, runtime.config.wallets as Record<string, HistoryProfile>)
 	const nowSec = Math.floor(runtime.now().getTime() / 1000)
-	const lp = resolveLpInputs(runtime.config, request.positionId, nowSec)
+	const lp = resolveLpInputs(runtime, request.positionId, nowSec)
 	const terms = scoreToTerms({
 		liquidity: lp.liquidity,
 		positionAgeDays: lp.positionAgeDays,
