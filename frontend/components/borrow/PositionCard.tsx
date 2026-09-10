@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { formatLiquidity } from "@/lib/format";
 import {
   pairLabel,
@@ -88,19 +89,24 @@ export function PositionCard({
           1:1 value is set by the vault when the CRE report lands.
         </span>
       </p>
-      <button
-        type="button"
-        onClick={locked ? onSelect : onLock}
-        disabled={!canWrite || pending}
-        className={
-          locked
-            ? "mt-4 inline-flex items-center justify-center gap-2 border border-[var(--color-hairline-hi)] px-3 py-2 font-mono text-[11px] font-semibold uppercase tracking-wider text-[var(--color-ink)] transition-colors hover:border-[var(--color-acid)] hover:text-[var(--color-acid)] disabled:cursor-not-allowed disabled:opacity-40"
-            : "mt-4 inline-flex items-center justify-center gap-2 border border-[var(--color-acid)] bg-[var(--color-acid)] px-3 py-2 font-mono text-[11px] font-semibold uppercase tracking-wider text-[var(--color-ground)] transition-colors hover:bg-[var(--color-acid-dim)] disabled:cursor-not-allowed disabled:opacity-40"
-        }
-      >
-        {pending && <Spinner className="size-3.5" />}
-        {locked ? "View terms" : "Lock & request terms"}
-      </button>
+      {locked ? (
+        <Link
+          href={`/loan/${position.tokenId.toString()}`}
+          className="mt-4 inline-flex items-center justify-center gap-2 border border-[var(--color-hairline-hi)] px-3 py-2 font-mono text-[11px] font-semibold uppercase tracking-wider text-[var(--color-ink)] transition-colors hover:border-[var(--color-acid)] hover:text-[var(--color-acid)]"
+        >
+          View terms
+        </Link>
+      ) : (
+        <button
+          type="button"
+          onClick={onLock}
+          disabled={!canWrite || pending}
+          className="mt-4 inline-flex items-center justify-center gap-2 border border-[var(--color-acid)] bg-[var(--color-acid)] px-3 py-2 font-mono text-[11px] font-semibold uppercase tracking-wider text-[var(--color-ground)] transition-colors hover:bg-[var(--color-acid-dim)] disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {pending && <Spinner className="size-3.5" />}
+          Lock & request terms
+        </button>
+      )}
     </article>
   );
 }

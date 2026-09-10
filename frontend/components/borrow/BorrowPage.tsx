@@ -741,11 +741,25 @@ export function BorrowPage() {
 
         <div className="flex flex-col gap-6 lg:sticky lg:top-[84px] lg:self-start">
           <section className="border border-[var(--color-hairline)] bg-[var(--color-panel)] p-6">
-            <div className="mb-5 flex items-center justify-between">
+            <div className="mb-5 flex items-center justify-between gap-3">
               <h2 className="font-mono text-sm uppercase tracking-widest text-[var(--color-ink)]">
                 Loan terms
               </h2>
-              <StatusBadge phase={validPhase} />
+              <div className="flex items-center gap-3">
+                {submittedId != null &&
+                (validPhase === "locked" ||
+                  validPhase === "active" ||
+                  validPhase === "repaid" ||
+                  validPhase === "liquidated") ? (
+                  <Link
+                    href={`/loan/${submittedId.toString()}`}
+                    className="font-mono text-[11px] uppercase tracking-widest text-[var(--color-ink-dim)] transition-colors hover:text-[var(--color-acid)]"
+                  >
+                    Inspect loan
+                  </Link>
+                ) : null}
+                <StatusBadge phase={validPhase} />
+              </div>
             </div>
 
             {hasTerms && loan ? (
