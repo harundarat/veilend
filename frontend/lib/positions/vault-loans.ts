@@ -1,4 +1,4 @@
-import { type PublicClient } from "viem";
+import { type Address, type PublicClient } from "viem";
 import { sepolia } from "wagmi/chains";
 import {
   ADDRESSES,
@@ -30,6 +30,7 @@ async function collectEventIds(
   publicClient: PublicClient,
   event: typeof POSITION_LOCKED | typeof LOAN_LIQUIDATED,
   chainId: number,
+  args?: { borrower?: Address },
 ) {
   const startBlock = chainId === sepolia.id ? VAULT_DEPLOY_BLOCK : BigInt(0);
   const latest = await publicClient.getBlockNumber();
@@ -53,6 +54,7 @@ async function collectEventIds(
         publicClient.getLogs({
           address: ADDRESSES.vault,
           event,
+          ...(args ? { args } : {}),
           ...range,
         }),
       ),
@@ -76,6 +78,18 @@ export async function fetchLiquidatedLoanIds(publicClient: PublicClient, chainId
 
 export async function fetchLockedLoanIds(publicClient: PublicClient, chainId: number) {
   return collectEventIds(publicClient, POSITION_LOCKED, chainId);
+}
+
+export async function fetchWalletLoanIds(
+  publicClient: PublicClient,
+  chainId: number,
+  borrower: Address,
+) {
+  const [locked, liquidated] = await Promise.all([
+    collectEventIds(publicClient, POSITION_LOCKED, chainId, { borrower }),
+    collectEventIds(publicClient, LOAN_LIQUIDATED, chainId, { borrower }),
+  ]);
+  return unionTokenIds(locked, liquidated);
 }
 
 export function mergeVaultLoanIds(...lists: Array<Iterable<string>>) {

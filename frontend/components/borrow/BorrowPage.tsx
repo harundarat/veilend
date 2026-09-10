@@ -38,6 +38,7 @@ import {
   truncateAddress,
 } from "@/lib/format";
 import { DISCOVERY_UNAVAILABLE, unionTokenIds } from "@/lib/positions/discover";
+import { rememberPositionId, useExtraPositionIds } from "@/lib/positions/extra-ids";
 import {
   asLoan,
   asPoolKey,
@@ -173,7 +174,6 @@ export function BorrowPage() {
 
   const [positionInput, setPositionInput] = useState(() => searchParams.get("id") ?? "");
   const [submittedId, setSubmittedId] = useState<bigint | null>(null);
-  const [extraByWallet, setExtraByWallet] = useState<Record<string, string[]>>({});
   const [pending, setPending] = useState<PendingKind | null>(null);
   const [lastTx, setLastTx] = useState<string | null>(null);
   const [faucetOpen, setFaucetOpen] = useState(false);
@@ -183,7 +183,7 @@ export function BorrowPage() {
 
   const tokenId = submittedId ?? BigInt(0);
   const readsEnabled = submittedId !== null && Boolean(address) && (connected || wrongNetwork);
-  const extraIds = address ? (extraByWallet[address.toLowerCase()] ?? []) : [];
+  const extraIds = useExtraPositionIds(address);
   const discovered = useDiscoveredPositions({ wallet: address, chainId, extraIds });
   const hydrateKey = unionTokenIds(
     discovered.tokenIds,
@@ -366,13 +366,7 @@ export function BorrowPage() {
 
   const rememberId = (id: bigint) => {
     if (!address) return;
-    const key = address.toLowerCase();
-    const value = id.toString();
-    setExtraByWallet((current) => {
-      const existing = current[key] ?? [];
-      if (existing.includes(value)) return current;
-      return { ...current, [key]: [...existing, value] };
-    });
+    rememberPositionId(address, id.toString());
   };
 
   const selectPosition = (id: bigint) => {

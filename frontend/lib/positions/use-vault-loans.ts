@@ -11,6 +11,7 @@ import { asLoan, hasLoan } from "@/lib/positions/hydrate";
 import {
   fetchLiquidatedLoanIds,
   fetchLockedLoanIds,
+  fetchWalletLoanIds,
 } from "@/lib/positions/vault-loans";
 
 export type VaultLoanRow = {
@@ -64,6 +65,33 @@ export function useVaultLoanIds({
   return {
     tokenIds: unionTokenIds(query.data?.tokenIds ?? [], extraIds),
     unavailable: Boolean(query.data?.unavailable) || query.isError,
+    isLoading: enabled && query.isPending,
+    refetch: query.refetch,
+  };
+}
+
+export function useWalletLoanEventIds({
+  wallet,
+  chainId,
+  enabled,
+}: {
+  wallet?: Address;
+  chainId: number;
+  enabled: boolean;
+}) {
+  const publicClient = usePublicClient();
+  const query = useQuery({
+    queryKey: ["veilend-wallet-loan-events", wallet, chainId],
+    enabled: enabled && Boolean(wallet) && Boolean(publicClient),
+    refetchOnReconnect: true,
+    queryFn: async () => {
+      if (!publicClient || !wallet) return [] as string[];
+      return fetchWalletLoanIds(publicClient, chainId, wallet);
+    },
+  });
+
+  return {
+    tokenIds: query.data ?? [],
     isLoading: enabled && query.isPending,
     refetch: query.refetch,
   };
