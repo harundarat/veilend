@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useChainId } from "wagmi";
 import { ConfirmModal } from "@/components/shell/ConfirmModal";
+import { CheckIcon, CopyIcon } from "@/components/shell/icons";
 import {
   ADDRESSES,
   GRACE_PERIOD_SECONDS,
@@ -52,6 +53,69 @@ function relativeDeadline(deadlineMs: number, now: number) {
 function deadlineMsOf(loan: VaultLoan) {
   if (loan.defaultDeadline <= BigInt(0)) return 0;
   return Number(loan.defaultDeadline) * 1000;
+}
+
+function dateFmt(ms: number) {
+  return new Date(ms).toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function actionCopy(status: LiquidateUiStatus) {
+  const action = liquidateAction(status);
+  if (action === "liquidate") {
+    return "The NFT has been in the vault since lock. liquidate() unlocks the hook and marks the loan liquidated. It does not pull the NFT from the borrower. Anyone may call it after defaultDeadline. A second transaction withdraws the seized liquidity.";
+  }
+  if (action === "withdraw") {
+    return "This loan is already liquidated. withdrawSeizedLiquidity() burns the position NFT and takes the underlying token pair into the vault. Not an auction and not a partial liquidation.";
+  }
+  if (action === "closed") {
+    return "No vault actions remain. The position was liquidated and seized liquidity has been withdrawn.";
+  }
+  return "This loan is still inside the repay window (now ≤ defaultDeadline). Liquidate is unavailable until the deadline passes.";
+}
+
+function DetailRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-4 border-b border-[var(--color-hairline)] py-2.5 last:border-b-0">
+      <span className="font-mono text-[11px] uppercase tracking-widest text-[var(--color-ink-dim)]">
+        {label}
+      </span>
+      <span className="min-w-0 font-mono text-sm text-[var(--color-ink)]">{children}</span>
+    </div>
+  );
+}
+
+function CopyAddress({ address }: { address: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(address);
+    } catch {
+      /* clipboard unavailable in some sandboxes */
+    }
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1400);
+  };
+  return (
+    <button
+      type="button"
+      onClick={copy}
+      title="Copy borrower address"
+      className="flex min-w-0 items-center gap-2 text-left font-mono text-xs text-[var(--color-ink)] transition-colors hover:text-[var(--color-acid)]"
+    >
+      <span className="truncate tabular-nums">{address}</span>
+      {copied ? (
+        <CheckIcon className="size-3.5 shrink-0 text-[var(--color-ok)]" />
+      ) : (
+        <CopyIcon className="size-3.5 shrink-0 opacity-70" />
+      )}
+    </button>
+  );
 }
 
 function Spinner({ className }: { className?: string }) {
@@ -399,18 +463,17 @@ export function LiquidatePage({ positionId }: { positionId?: string }) {
         <div className="lg:sticky lg:top-[84px] lg:self-start">
           {!selected ? (
             <div className="border border-dashed border-[var(--color-hairline-hi)] bg-[var(--color-panel)] p-8 text-center">
-              <p className="font-mono text-sm text-[var(--color-ink-dim)]">Select a loan</p>
-              <p className="mt-2 font-mono text-[11px] text-[var(--color-ink-faint)]">
-                Choose a row to review its detail and available action.
+              <p className="font-mono text-sm text-[var(--color-ink-dim)]">
+                Select a loan in the table.
               </p>
             </div>
           ) : gridLoading ? (
-            <div className="h-48 animate-pulse border border-[var(--color-hairline)] bg-[var(--color-panel)]" />
+            <div className="h-80 animate-pulse border border-[var(--color-hairline)] bg-[var(--color-panel)]" />
           ) : selectedRow && selectedStatus ? (
             <section className="border border-[var(--color-hairline)] bg-[var(--color-panel)] p-6">
-              <div className="mb-4 flex items-center justify-between">
+              <div className="mb-4 flex items-center justify-between gap-3">
                 <h2 className="font-mono text-sm uppercase tracking-widest text-[var(--color-ink)]">
-                  Position #{selectedRow.tokenId.toString()}
+                  #{selectedRow.tokenId.toString()}
                 </h2>
                 <span
                   className="font-mono text-[10px] uppercase tracking-widest"
@@ -419,19 +482,57 @@ export function LiquidatePage({ positionId }: { positionId?: string }) {
                   {LIQUIDATE_STATUS_META[selectedStatus].label}
                 </span>
               </div>
-              <ActionButton
-                status={selectedStatus}
-                canWrite={canWrite}
-                walletState={state}
-                pending={pending}
-                relText={selectedRel.text}
-                onLiquidate={() => setConfirming(true)}
-                onWithdraw={() => void run("withdraw", selectedRow.loan)}
-              />
+              <DetailRow label="Borrower">
+                <CopyAddress address={selectedRow.loan.borrower} />
+              </DetailRow>
+              <DetailRow label="principal">
+                <span className="tabular-nums">
+                  {formatToken(selectedRow.loan.principal, LOAN_TOKEN_DECIMALS)} {LOAN_TOKEN_SYMBOL}
+                </span>
+              </DetailRow>
+              <DetailRow label="defaultDeadline">
+                <span
+                  className={`text-right ${
+                    selectedRel.overdue && liquidateAction(selectedStatus) !== "closed"
+                      ? "text-[var(--color-danger)]"
+                      : ""
+                  }`}
+                >
+                  {selectedDeadlineMs > 0 ? (
+                    <>
+                      <span className="block tabular-nums">{dateFmt(selectedDeadlineMs)}</span>
+                      <span className="block font-mono text-[11px] text-[var(--color-ink-dim)]">
+                        {selectedRel.text}
+                      </span>
+                    </>
+                  ) : (
+                    "—"
+                  )}
+                </span>
+              </DetailRow>
+              <p className="mt-4 font-mono text-[11px] leading-relaxed text-[var(--color-ink-dim)]">
+                {actionCopy(selectedStatus)}
+              </p>
+              <div className="mt-5">
+                <ActionButton
+                  status={selectedStatus}
+                  canWrite={canWrite}
+                  walletState={state}
+                  pending={pending}
+                  relText={selectedRel.text}
+                  onLiquidate={() => setConfirming(true)}
+                  onWithdraw={() => void run("withdraw", selectedRow.loan)}
+                />
+              </div>
             </section>
           ) : (
             <div className="border border-dashed border-[var(--color-hairline-hi)] bg-[var(--color-panel)] p-8 text-center">
-              <p className="font-mono text-sm text-[var(--color-ink-dim)]">Select a loan</p>
+              <p className="font-mono text-sm text-[var(--color-ink-dim)]">
+                No loan for this position ID
+              </p>
+              <p className="mt-2 font-mono text-[11px] text-[var(--color-ink-faint)]">
+                #{selected} is not on the liquidate list. The table is unchanged.
+              </p>
             </div>
           )}
         </div>
