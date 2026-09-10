@@ -5,14 +5,14 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { useAccount, useChainId } from "wagmi";
 import { LoanCard, LoanCardSkeleton } from "@/components/loan/LoanCard";
-import { SAMPLE_POSITION_ID } from "@/lib/contracts";
+import { DEMO_LOAN_IDS, SAMPLE_POSITION_ID } from "@/lib/contracts";
 import { DISCOVERY_UNAVAILABLE } from "@/lib/positions/discover";
 import { isWalletLoan } from "@/lib/positions/hydrate";
 import { useHydratePositions } from "@/lib/positions/use-hydrate";
 import { useDiscoveredPositions } from "@/lib/positions/use-positions";
 import { useWalletUi } from "@/lib/use-wallet-ui";
 
-function LookupForm() {
+export function LookupForm() {
   const router = useRouter();
   const [id, setId] = useState("");
   const go = () => {
@@ -147,6 +147,24 @@ export function LoanLanding() {
             {DISCOVERY_UNAVAILABLE}
           </p>
         ) : null}
+      </section>
+
+      <section className="mb-8">
+        <h2 className="mb-3 font-mono text-sm uppercase tracking-widest text-[var(--color-ink)]">
+          Demo loans
+        </h2>
+        <div className="flex flex-wrap gap-2">
+          {DEMO_LOAN_IDS.map((id) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => router.push(`/loan/${id}`)}
+              className="border border-[var(--color-hairline-hi)] px-3 py-1.5 font-mono text-xs tabular-nums text-[var(--color-ink-dim)] transition-colors hover:border-[var(--color-acid)] hover:text-[var(--color-acid)]"
+            >
+              {id}
+            </button>
+          ))}
+        </div>
       </section>
 
       <LookupForm />

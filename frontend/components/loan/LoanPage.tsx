@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { type Address, zeroAddress } from "viem";
 import { sepolia } from "wagmi/chains";
@@ -27,7 +28,7 @@ import {
   formatToken,
   truncateAddress,
 } from "@/lib/format";
-import { LoanLanding } from "@/components/loan/LoanLanding";
+import { LoanLanding, LookupForm } from "@/components/loan/LoanLanding";
 import {
   asLoan,
   hasLoan,
@@ -212,6 +213,9 @@ function NotFoundState({ id }: { id: string }) {
           >
             Go to Borrow
           </Link>
+        </div>
+        <div className="mt-8 w-full text-left">
+          <LookupForm />
         </div>
       </div>
     </Shell>
@@ -619,7 +623,10 @@ function useLoanLogs(tokenId: bigint | null, enabled: boolean) {
 }
 
 export function LoanPage({ positionId }: { positionId?: string }) {
-  const rawId = positionId?.trim() ?? "";
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const queryId = searchParams.get("id")?.trim() ?? "";
+  const rawId = positionId?.trim() || queryId;
   const validId = /^\d+$/.test(rawId);
   const tokenId = validId ? BigInt(rawId) : null;
 
@@ -629,6 +636,16 @@ export function LoanPage({ positionId }: { positionId?: string }) {
   const runTx = useWriteTx();
   const queryClient = useQueryClient();
   const now = useNow();
+  const lastAddress = useRef<string | undefined>(undefined);
+
+  useEffect(() => {
+    const previous = lastAddress.current;
+    lastAddress.current = address;
+    if (!rawId) return;
+    if (previous && previous !== address) {
+      router.replace("/loan");
+    }
+  }, [address, rawId, router]);
 
   const connected = state === "connected";
   const canWrite = connected && Boolean(address);
