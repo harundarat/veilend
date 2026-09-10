@@ -17,6 +17,15 @@ export type Phase =
 
 export type CardStatus = "eligible" | "locked";
 
+export type LoanUiStatus = "locked" | "active" | "repaid" | "liquidated";
+
+export const LOAN_STATUS_META: Record<LoanUiStatus, { label: string; color: string }> = {
+  locked: { label: "Locked — waiting CRE", color: "var(--color-warn)" },
+  active: { label: "Active", color: "var(--color-acid)" },
+  repaid: { label: "Repaid", color: "var(--color-ok)" },
+  liquidated: { label: "Liquidated", color: "var(--color-danger)" },
+};
+
 export type HydratedPosition = {
   tokenId: bigint;
   owner: Address;
@@ -108,6 +117,23 @@ export function isBorrowerOf(loan: VaultLoan | undefined, wallet?: Address) {
     !sameAddress(loan?.borrower, zeroAddress) &&
     sameAddress(loan?.borrower, wallet)
   );
+}
+
+export function hasLoan(loan: VaultLoan | undefined) {
+  return Boolean(loan && !sameAddress(loan.borrower, zeroAddress));
+}
+
+export function loanUiStatus(loan: VaultLoan | undefined): LoanUiStatus | null {
+  if (!hasLoan(loan) || !loan) return null;
+  if (loan.liquidated) return "liquidated";
+  if (loan.repaid) return "repaid";
+  if (loan.active) return "active";
+  if (loan.locked) return "locked";
+  return null;
+}
+
+export function isWalletLoan(loan: VaultLoan | undefined, wallet?: Address) {
+  return isBorrowerOf(loan, wallet) && loanUiStatus(loan) !== null;
 }
 
 export function derivePhase(

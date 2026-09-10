@@ -35,6 +35,8 @@ export const README_URL =
 export const SAMPLE_POSITION_ID = "39014";
 export const FAUCET_AMOUNT = BigInt(1000) * BigInt(10) ** BigInt(18);
 export const RELAYER_TIMEOUT_MS = 60_000;
+export const GRACE_PERIOD_SECONDS = 300;
+export const VAULT_DEPLOY_BLOCK = BigInt(11_668_120);
 export const LOAN_TOKEN_SYMBOL = "vdUSD";
 export const LOAN_TOKEN_DECIMALS = 18;
 
@@ -63,6 +65,14 @@ export const vaultAbi = parseAbi([
   "function lockPosition(uint256 positionId)",
   "function repayLoan(uint256 positionId)",
   "function getLoan(uint256 positionId) view returns ((address borrower, uint256 positionId, uint256 ltvBps, uint256 aprBps, uint256 expiry, uint256 defaultDeadline, uint256 collateralValue, uint256 principal, bool active, bool locked, bool repaid, bool liquidated))",
+]);
+
+export const vaultEventsAbi = parseAbi([
+  "event PositionLocked(address indexed borrower, uint256 indexed positionId, uint256 timestamp)",
+  "event CreditReportSubmitted(address indexed borrower, uint256 indexed positionId, uint256 ltvBps, uint256 aprBps, uint256 expiry, uint256 principal)",
+  "event LoanRepaid(address indexed borrower, uint256 indexed positionId, uint256 repayAmount)",
+  "event LoanLiquidated(uint256 indexed positionId, address indexed liquidator, address indexed borrower)",
+  "event SeizedLiquidityWithdrawn(uint256 indexed positionId, uint256 amount0, uint256 amount1)",
 ]);
 
 export type VaultLoan = {
