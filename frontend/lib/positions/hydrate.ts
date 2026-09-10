@@ -1,0 +1,186 @@
+import { type Address, zeroAddress } from "viem";
+import {
+  ADDRESSES,
+  isDemoPool,
+  type PoolKeyResult,
+  type VaultLoan,
+} from "@/lib/contracts";
+import { truncateAddress } from "@/lib/format";
+
+export type Phase =
+  | "found"
+  | "approved"
+  | "locked"
+  | "active"
+  | "repaid"
+  | "liquidated";
+
+export type CardStatus = "eligible" | "locked";
+
+export type HydratedPosition = {
+  tokenId: bigint;
+  owner: Address;
+  liquidity: bigint;
+  poolKey: PoolKeyResult;
+  loan: VaultLoan | undefined;
+  status: CardStatus;
+};
+
+export function asLoan(value: unknown): VaultLoan | undefined {
+  if (!value) return undefined;
+  if (Array.isArray(value)) {
+    const [
+      borrower,
+      positionId,
+      ltvBps,
+      aprBps,
+      expiry,
+      defaultDeadline,
+      collateralValue,
+      principal,
+      active,
+      locked,
+      repaid,
+      liquidated,
+    ] = value as [
+      Address,
+      bigint,
+      bigint,
+      bigint,
+      bigint,
+      bigint,
+      bigint,
+      bigint,
+      boolean,
+      boolean,
+      boolean,
+      boolean,
+    ];
+    return {
+      borrower,
+      positionId,
+      ltvBps,
+      aprBps,
+      expiry,
+      defaultDeadline,
+      collateralValue,
+      principal,
+      active,
+      locked,
+      repaid,
+      liquidated,
+    };
+  }
+  return value as VaultLoan;
+}
+
+export function asPoolKey(value: unknown): PoolKeyResult | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  if (Array.isArray(value)) {
+    const first = value[0] as PoolKeyResult | unknown[];
+    if (Array.isArray(first)) {
+      const [currency0, currency1, fee, tickSpacing, hooks] = first as [
+        Address,
+        Address,
+        number,
+        number,
+        Address,
+      ];
+      return { currency0, currency1, fee, tickSpacing, hooks };
+    }
+    if (first && typeof first === "object" && "currency0" in first) {
+      return first as PoolKeyResult;
+    }
+    return undefined;
+  }
+  if ("currency0" in value) return value as PoolKeyResult;
+  if ("poolKey" in value) return asPoolKey((value as { poolKey: unknown }).poolKey);
+  return undefined;
+}
+
+export function sameAddress(a?: string, b?: string) {
+  return Boolean(a && b && a.toLowerCase() === b.toLowerCase());
+}
+
+export function isBorrowerOf(loan: VaultLoan | undefined, wallet?: Address) {
+  return (
+    Boolean(loan) &&
+    !sameAddress(loan?.borrower, zeroAddress) &&
+    sameAddress(loan?.borrower, wallet)
+  );
+}
+
+export function derivePhase(
+  loan: VaultLoan | undefined,
+  owner: Address | undefined,
+  wallet: Address | undefined,
+  approved: boolean,
+): Phase | null {
+  if (!owner || !wallet) return null;
+  const isOwner = sameAddress(owner, wallet);
+  const inVault = sameAddress(owner, ADDRESSES.vault);
+  const isBorrower = isBorrowerOf(loan, wallet);
+
+  if (loan?.liquidated && (isBorrower || inVault)) return "liquidated";
+  if (loan?.repaid && (isOwner || isBorrower)) return "repaid";
+  if (loan?.active && isBorrower) return "active";
+  if (loan?.locked && !loan.active && isBorrower) return "locked";
+  if (isOwner && approved) return "approved";
+  if (isOwner) return "found";
+  return null;
+}
+
+export function pairLabel(poolKey: PoolKeyResult) {
+  const symbol = (address: Address) => {
+    if (sameAddress(address, ADDRESSES.vusd)) return "vUSD";
+    if (sameAddress(address, ADDRESSES.veur)) return "vEUR";
+    return truncateAddress(address);
+  };
+  return `${symbol(poolKey.currency0)} / ${symbol(poolKey.currency1)}`;
+}
+
+export function classifyPosition(input: {
+  tokenId: bigint;
+  owner?: Address;
+  liquidity?: bigint;
+  poolKey?: PoolKeyResult;
+  loan?: VaultLoan;
+  wallet?: Address;
+}): { kind: "skip" } | { kind: "card"; position: HydratedPosition } {
+  const { tokenId, owner, liquidity, poolKey, loan, wallet } = input;
+  if (!owner || !wallet || !poolKey) return { kind: "skip" };
+  if (!isDemoPool(poolKey)) return { kind: "skip" };
+
+  const isOwner = sameAddress(owner, wallet);
+  const isBorrower = isBorrowerOf(loan, wallet);
+  if (!isOwner && !isBorrower) return { kind: "skip" };
+
+  const live = Boolean(loan && isBorrower && (loan.locked || loan.active || loan.liquidated));
+  if (live) {
+    return {
+      kind: "card",
+      position: {
+        tokenId,
+        owner,
+        liquidity: liquidity ?? BigInt(0),
+        poolKey,
+        loan,
+        status: "locked",
+      },
+    };
+  }
+
+  if (!isOwner) return { kind: "skip" };
+
+  return {
+    kind: "card",
+    position: {
+      tokenId,
+      owner,
+      liquidity: liquidity ?? BigInt(0),
+      poolKey,
+      loan,
+      status: "eligible",
+    },
+  };
+}
