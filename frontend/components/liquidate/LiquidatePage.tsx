@@ -35,7 +35,7 @@ type PendingKind = "liquidate" | "withdraw";
 const FILTERS: { key: Filter; label: string }[] = [
   { key: "all", label: "All" },
   { key: "eligible", label: "Eligible now" },
-  { key: "liquidated", label: "Already liquidated" },
+  { key: "liquidated", label: "Pending withdrawal" },
 ];
 
 function relativeDeadline(deadlineMs: number, now: number) {
@@ -69,15 +69,15 @@ function dateFmt(ms: number) {
 function actionCopy(status: LiquidateUiStatus) {
   const action = liquidateAction(status);
   if (action === "liquidate") {
-    return "The NFT has been in the vault since lock. liquidate() unlocks the hook and marks the loan liquidated. It does not pull the NFT from the borrower. Anyone may call it after defaultDeadline. A second transaction withdraws the seized liquidity.";
+    return "This loan is overdue. Triggering liquidation marks the position as defaulted and unlocks the vault — no borrower action needed. A follow-up transaction will claim the underlying liquidity.";
   }
   if (action === "withdraw") {
-    return "This loan is already liquidated. withdrawSeizedLiquidity() burns the position NFT and takes the underlying token pair into the vault. Not an auction and not a partial liquidation.";
+    return "Liquidation already recorded. Withdraw now to claim the seized liquidity — this burns the position NFT and transfers the token pair into the vault. One transaction, no partial fills.";
   }
   if (action === "closed") {
-    return "No vault actions remain. The position was liquidated and seized liquidity has been withdrawn.";
+    return "No further actions available. The position was liquidated and the seized liquidity has been withdrawn.";
   }
-  return "This loan is still inside the repay window (now ≤ defaultDeadline). Liquidate is unavailable until the deadline passes.";
+  return "This loan is still within the repayment window. Liquidation is unavailable until the repay deadline passes.";
 }
 
 function DetailRow({ label, children }: { label: string; children: React.ReactNode }) {
@@ -153,9 +153,9 @@ function TableSkeleton() {
 function EmptyLoans() {
   return (
     <div className="flex min-h-[40vh] flex-col items-center justify-center border border-dashed border-[var(--color-hairline-hi)] bg-[var(--color-panel)] p-10 text-center">
-      <p className="font-mono text-sm text-[var(--color-ink)]">No loans past due.</p>
+      <p className="font-mono text-sm text-[var(--color-ink)]">No overdue loans.</p>
       <p className="mt-2 font-mono text-[11px] text-[var(--color-ink-dim)]">
-        Demo GRACE_PERIOD is {Math.floor(GRACE_PERIOD_SECONDS / 60)} minutes.
+        Grace period: {Math.floor(GRACE_PERIOD_SECONDS / 60)} minutes.
       </p>
     </div>
   );
@@ -367,10 +367,11 @@ export function LiquidatePage({ positionId }: { positionId?: string }) {
           Close overdue loans
         </h1>
         <p className="mt-4 text-sm leading-relaxed text-[var(--color-ink-dim)]">
-          After <code className="text-[var(--color-ink)]">defaultDeadline</code>, the position NFT
-          has already been sitting in the vault since it was locked. Liquidating does not seize an
-          NFT from the borrower&apos;s wallet — it simply withdraws the underlying liquidity. Anyone
-          can trigger it; no borrower permission is required.
+          Once the repayment deadline has passed, the position NFT has already
+          been sitting in the vault since it was locked. Liquidating does not
+          seize an NFT from the borrower&apos;s wallet — it simply withdraws the
+          underlying liquidity. Anyone can trigger it; no borrower permission is
+          required.
         </p>
       </header>
 
@@ -400,9 +401,9 @@ export function LiquidatePage({ positionId }: { positionId?: string }) {
           ) : (
             <div className="overflow-hidden border border-[var(--color-hairline)]">
               <div className="hidden grid-cols-[1fr_1.2fr_1fr_1.1fr_auto] gap-4 border-b border-[var(--color-hairline)] bg-[var(--color-panel-hi)] px-4 py-3 font-mono text-[10px] uppercase tracking-widest text-[var(--color-ink-faint)] md:grid">
-                <span>positionId</span>
+                <span>Position ID</span>
                 <span>Borrower</span>
-                <span>principal</span>
+                <span>Principal</span>
                 <span>Deadline</span>
                 <span className="text-right">Action</span>
               </div>
@@ -486,12 +487,12 @@ export function LiquidatePage({ positionId }: { positionId?: string }) {
               <DetailRow label="Borrower">
                 <CopyAddress address={selectedRow.loan.borrower} />
               </DetailRow>
-              <DetailRow label="principal">
+              <DetailRow label="Principal">
                 <span className="tabular-nums">
                   {formatToken(selectedRow.loan.principal, LOAN_TOKEN_DECIMALS)} {LOAN_TOKEN_SYMBOL}
                 </span>
               </DetailRow>
-              <DetailRow label="defaultDeadline">
+              <DetailRow label="Repay Deadline">
                 <span
                   className={`text-right ${
                     selectedRel.overdue && liquidateAction(selectedStatus) !== "closed"
@@ -535,10 +536,10 @@ export function LiquidatePage({ positionId }: { positionId?: string }) {
           ) : (
             <div className="border border-dashed border-[var(--color-hairline-hi)] bg-[var(--color-panel)] p-8 text-center">
               <p className="font-mono text-sm text-[var(--color-ink-dim)]">
-                No loan for this position ID
+                Position #{selected} not found
               </p>
               <p className="mt-2 font-mono text-[11px] text-[var(--color-ink-faint)]">
-                #{selected} is not on the liquidate list. The table is unchanged.
+                This loan may have already been repaid, or it isn&apos;t eligible for liquidation.
               </p>
             </div>
           )}
@@ -552,7 +553,7 @@ export function LiquidatePage({ positionId }: { positionId?: string }) {
             ? `Liquidate position #${selectedRow.tokenId.toString()}`
             : "Liquidate"
         }
-        amountLabel="principal at risk"
+        amountLabel="loan principal"
         amount={
           selectedRow
             ? `${formatToken(selectedRow.loan.principal, LOAN_TOKEN_DECIMALS)} ${LOAN_TOKEN_SYMBOL}`
