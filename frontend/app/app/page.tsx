@@ -1,11 +1,10 @@
-import { Placeholder } from "@/components/Placeholder";
+import { Suspense } from "react";
+import { BorrowPage } from "@/components/borrow/BorrowPage";
 
-export default function BorrowPage() {
+export default function Page() {
   return (
-    <Placeholder
-      index="02"
-      title="Borrow"
-      note="Lock a demo-pool LP position and draw principal. This flow ships in a later task."
-    />
+    <Suspense fallback={<div className="min-h-[60vh]" />}>
+      <BorrowPage />
+    </Suspense>
   );
 }

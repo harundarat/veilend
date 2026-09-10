@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Footer } from "./Footer";
 import { Header } from "./Header";
 import { NetworkBanner } from "./NetworkBanner";
+import { ToastSlot } from "./ToastProvider";
 
 export function AppShell({ children }: { children: ReactNode }) {
   return (
@@ -10,6 +11,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <NetworkBanner />
       <main className="mx-auto w-full max-w-[1280px] flex-1 px-6">{children}</main>
       <Footer />
+      <ToastSlot />
     </div>
   );
 }
