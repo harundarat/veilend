@@ -1,8 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { type Address, zeroAddress } from "viem";
 import { sepolia } from "wagmi/chains";
@@ -622,11 +621,7 @@ function useLoanLogs(tokenId: bigint | null, enabled: boolean) {
   });
 }
 
-export function LoanPage({ positionId }: { positionId?: string }) {
-  const searchParams = useSearchParams();
-  const router = useRouter();
-  const queryId = searchParams.get("id")?.trim() ?? "";
-  const rawId = positionId?.trim() || queryId;
+function LoanDetail({ rawId }: { rawId: string }) {
   const validId = /^\d+$/.test(rawId);
   const tokenId = validId ? BigInt(rawId) : null;
 
@@ -636,16 +631,6 @@ export function LoanPage({ positionId }: { positionId?: string }) {
   const runTx = useWriteTx();
   const queryClient = useQueryClient();
   const now = useNow();
-  const lastAddress = useRef<string | undefined>(undefined);
-
-  useEffect(() => {
-    const previous = lastAddress.current;
-    lastAddress.current = address;
-    if (!rawId) return;
-    if (previous && previous !== address) {
-      router.replace("/loan");
-    }
-  }, [address, rawId, router]);
 
   const connected = state === "connected";
   const canWrite = connected && Boolean(address);
@@ -654,28 +639,33 @@ export function LoanPage({ positionId }: { positionId?: string }) {
   const [repayConfirm, setRepayConfirm] = useState(false);
 
   const readsEnabled = tokenId != null;
-  const positionQuery = useReadContracts({
-    allowFailure: true,
-    contracts: [
+  const ownerKey = address ?? zeroAddress;
+  const contracts = useMemo(
+    () => [
       {
         address: ADDRESSES.vault,
         abi: vaultAbi,
-        functionName: "getLoan",
-        args: tokenId != null ? [tokenId] : [BigInt(0)],
+        functionName: "getLoan" as const,
+        args: [tokenId ?? BigInt(0)] as const,
       },
       {
         address: ADDRESSES.positionManager,
         abi: erc721Abi,
-        functionName: "ownerOf",
-        args: tokenId != null ? [tokenId] : [BigInt(0)],
+        functionName: "ownerOf" as const,
+        args: [tokenId ?? BigInt(0)] as const,
       },
       {
         address: ADDRESSES.vdusd,
         abi: erc20Abi,
-        functionName: "allowance",
-        args: [address ?? zeroAddress, ADDRESSES.vault],
+        functionName: "allowance" as const,
+        args: [ownerKey, ADDRESSES.vault] as const,
       },
     ],
+    [ownerKey, tokenId],
+  );
+  const positionQuery = useReadContracts({
+    allowFailure: true,
+    contracts,
     query: {
       enabled: readsEnabled,
       refetchInterval: (query) => {
@@ -707,7 +697,6 @@ export function LoanPage({ positionId }: { positionId?: string }) {
     [loan, found, logsQuery.data],
   );
 
-  if (!rawId) return <LoanLanding />;
   if (!validId) return <NotFoundState id={rawId} />;
   if (positionQuery.isPending && !positionQuery.data) {
     return <LoadingState id={rawId} />;
@@ -923,4 +912,10 @@ export function LoanPage({ positionId }: { positionId?: string }) {
       </ConfirmModal>
     </Shell>
   );
+}
+
+export function LoanPage({ positionId }: { positionId?: string }) {
+  const rawId = positionId?.trim() ?? "";
+  if (!rawId) return <LoanLanding />;
+  return <LoanDetail rawId={rawId} />;
 }
