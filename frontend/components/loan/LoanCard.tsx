@@ -84,7 +84,7 @@ export function LoanCard({
         onClick={onView}
         className="mt-4 inline-flex items-center justify-center border border-[var(--color-acid)] bg-[var(--color-acid)] px-3 py-2 font-mono text-[11px] font-semibold uppercase tracking-wider text-[var(--color-ground)] transition-colors hover:bg-[var(--color-acid-dim)]"
       >
-        View
+        View Loan
       </button>
     </article>
   );

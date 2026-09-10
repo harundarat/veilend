@@ -93,7 +93,7 @@ export function LoanLanding() {
           Your loans
         </h1>
         <p className="mt-3 max-w-xl text-sm leading-relaxed text-[var(--color-ink-dim)]">
-          Inspect on-chain numbers and the transaction trail for a single loan.
+          All your active and past loan positions in one place.
         </p>
       </header>
 
@@ -132,7 +132,7 @@ export function LoanLanding() {
             </p>
             <p className="mt-2 font-mono text-[11px] leading-relaxed text-[var(--color-ink-dim)]">
               <Link href="/app" className="underline hover:text-[var(--color-acid)]">
-                Lock a position on Borrow
+                Start a loan on Borrow
               </Link>
             </p>
             {discovered.unavailable ? (

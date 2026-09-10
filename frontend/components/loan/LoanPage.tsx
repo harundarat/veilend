@@ -404,11 +404,11 @@ function ActionPanel({
     return (
       <section className="border border-[var(--color-hairline)] bg-[var(--color-panel)] p-6">
         <h2 className="font-mono text-sm uppercase tracking-widest text-[var(--color-ink)]">
-          Waiting for CRE
+          Awaiting Credit Assessment
         </h2>
         <p className="mt-3 text-sm leading-relaxed text-[var(--color-ink-dim)]">
-          Personal LTV is computed in the TEE. A relayer writes terms on-chain — this is not
-          manual. Repay unlocks after principal is disbursed.
+          Your loan terms are being assessed privately via the Chainlink CRE TEE. A relayer writes
+          the result on-chain automatically. Repay becomes available once funds are disbursed.
         </p>
         <button
           type="button"
@@ -438,7 +438,7 @@ function ActionPanel({
           href={`/liquidate?id=${loan.positionId.toString()}`}
           className="mt-5 flex w-full items-center justify-center gap-2 border border-[var(--color-danger)] bg-[var(--color-danger)] px-5 py-2.5 font-mono text-xs font-semibold uppercase tracking-wider text-[var(--color-ground)] transition-colors hover:bg-[var(--color-danger-dim)]"
         >
-          Liquidate on Liquidate page
+          Go to Liquidate
         </Link>
       </section>
     );
@@ -472,7 +472,7 @@ function ActionPanel({
       <h2 className="font-mono text-sm uppercase tracking-widest text-[var(--color-ink)]">Repay</h2>
       <div className="mt-4 flex items-baseline justify-between border-b border-[var(--color-hairline)] pb-3">
         <span className="font-mono text-[11px] uppercase tracking-widest text-[var(--color-ink-dim)]">
-          repayAmount
+          Amount to repay
         </span>
         <span className="font-mono text-xl font-bold tabular-nums text-[var(--color-ink)]">
           {formatToken(repayAmount, LOAN_TOKEN_DECIMALS)}{" "}
@@ -503,7 +503,7 @@ function ActionPanel({
         </button>
       </div>
       <p className="mt-4 font-mono text-[11px] leading-relaxed text-[var(--color-ink-faint)]">
-        LP fees are not collected here. Collect after the NFT returns.
+        LP fees are not collected during repayment. Once your NFT returns to your wallet, fees can be claimed directly from the position.
       </p>
     </section>
   );
@@ -859,7 +859,7 @@ function LoanDetail({ rawId }: { rawId: string }) {
             </div>
             <p className="mt-3 flex items-center gap-2 font-mono text-[11px] text-[var(--color-ink-faint)]">
               <span className="size-1.5 rounded-full bg-[var(--color-danger)]" />
-              The TEE-internal credit score is never emitted on-chain and is not shown here.
+              Your credit score is computed privately inside a TEE and never stored on-chain.
             </p>
           </section>
 
