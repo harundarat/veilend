@@ -1,26 +1,61 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-archivo);
+  --font-mono: var(--font-jetbrains-mono);
+
+  --color-ground: #0a0b0a;
+  --color-panel: #111311;
+  --color-panel-hi: #171a17;
+  --color-hairline: #23271f;
+  --color-hairline-hi: #34392c;
+  --color-ink: #e8eae4;
+  --color-ink-dim: #8b9184;
+  --color-ink-faint: #5c6157;
+  --color-acid: #c7f21f;
+  --color-acid-dim: #97b81c;
+  --color-danger: #ff5a45;
+  --color-danger-dim: #c33a2b;
+  --color-warn: #ffb020;
+  --color-ok: #4fd18b;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html,
+body {
+  height: 100%;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--color-ground);
+  color: var(--color-ink);
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: var(--color-acid);
+  color: #0a0b0a;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+*:hover {
+  scrollbar-color: var(--color-hairline-hi) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 0;
+}
+
+:hover::-webkit-scrollbar-thumb {
+  background: var(--color-hairline-hi);
 }
