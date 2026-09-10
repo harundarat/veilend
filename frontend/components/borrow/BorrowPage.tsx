@@ -121,7 +121,7 @@ function RelayerTimeoutNotice() {
     <div className="mb-8 flex items-start gap-3 border border-[var(--color-danger-dim)] bg-[color-mix(in_srgb,var(--color-danger)_10%,transparent)] px-4 py-3">
       <AlertIcon className="mt-0.5 size-4 shrink-0 text-[var(--color-danger)]" />
       <div className="font-mono text-xs leading-relaxed text-[var(--color-danger)]">
-        Relayer timed out after ~30–60s. Make sure the Bun relayer is running, then retry lock.
+        Relayer timed out after ~30–60s. Please ensure the relayer service is running, then try locking again.
       </div>
       <button
         type="button"
@@ -453,8 +453,8 @@ export function BorrowPage() {
           Connect a wallet to begin
         </h1>
         <p className="mt-3 max-w-md text-sm leading-relaxed text-[var(--color-ink-dim)]">
-          Use the Connect wallet button in the header. You will select a demo-pool position,
-          approve its NFT to the vault, and lock it to draw principal.
+          Use the Connect wallet button in the header. Select an eligible LP position, approve it,
+          and lock it to borrow against your liquidity.
         </p>
       </div>
     );
@@ -468,7 +468,7 @@ export function BorrowPage() {
             Borrow
           </span>
           <h1 className="mt-3 font-mono text-3xl font-bold tracking-tight text-[var(--color-ink)] md:text-4xl">
-            Lock a position, draw principal
+            Lock a position, borrow stablecoins
           </h1>
         </div>
         <div className="flex items-center gap-3">
@@ -496,11 +496,11 @@ export function BorrowPage() {
           <div className="font-mono text-xs leading-relaxed text-[var(--color-danger)]">
             {findFailed ? (
               <>
-                Transaction reverted — no eligible position found for that ID. Try positionId{" "}
+                Position not found or not eligible for borrowing. Try position ID{" "}
                 {SAMPLE_POSITION_ID}.
               </>
             ) : (
-              <>Transaction reverted.</>
+              <>Transaction reverted or failed. Please try again.</>
             )}
           </div>
           <button
@@ -549,10 +549,10 @@ export function BorrowPage() {
             ) : (
               <div className="border border-[var(--color-hairline)] bg-[var(--color-panel)] p-6">
                 <p className="font-mono text-sm text-[var(--color-ink)]">
-                  No eligible Veilend demo-pool positions in this wallet
+                  No eligible positions found in this wallet
                 </p>
                 <p className="mt-2 font-mono text-[11px] leading-relaxed text-[var(--color-ink-dim)]">
-                  Demo-pool LP NFTs are minted outside this page.{" "}
+                  Eligible demo-pool LP NFTs are minted outside this page.{" "}
                   <Link
                     href="/#how-it-works"
                     className="underline hover:text-[var(--color-acid)]"
@@ -579,7 +579,7 @@ export function BorrowPage() {
             {...(searchParams.get("id") ? { open: true } : {})}
           >
             <summary className="cursor-pointer font-mono text-[11px] uppercase tracking-widest text-[var(--color-ink-dim)]">
-              Can&apos;t see it? Enter position ID
+              Don&apos;t see your position? Enter ID manually
             </summary>
             <label
               htmlFor="positionId"
@@ -624,7 +624,7 @@ export function BorrowPage() {
             </div>
             {findFailed ? (
               <p className="mt-3 font-mono text-[11px] leading-relaxed text-[var(--color-danger)]">
-                No eligible Veilend demo-pool position for that ID. Try {SAMPLE_POSITION_ID}.
+                No eligible demo-pool position for that ID. Try {SAMPLE_POSITION_ID}.
               </p>
             ) : (
               <p className="mt-3 font-mono text-[11px] leading-relaxed text-[var(--color-ink-faint)]">
@@ -641,7 +641,7 @@ export function BorrowPage() {
                 </h2>
                 <StatusBadge phase={validPhase} />
               </div>
-              <DataRow label="ownerOf">
+              <DataRow label="Position Owner">
                 <span className={inVault ? "text-[var(--color-warn)]" : "text-[var(--color-ink)]"}>
                   {inVault ? "Vault" : "Wallet"}{" "}
                   <span className="text-[var(--color-ink-dim)]">
@@ -695,7 +695,7 @@ export function BorrowPage() {
               </div>
               <div className="mt-4 flex items-baseline justify-between border-b border-[var(--color-hairline)] pb-3">
                 <span className="font-mono text-[11px] uppercase tracking-widest text-[var(--color-ink-dim)]">
-                  repayAmount
+                  Repay Amount
                 </span>
                 <span className="font-mono text-2xl font-bold tabular-nums text-[var(--color-ink)]">
                   {formatToken(repayAmount, LOAN_TOKEN_DECIMALS)}{" "}
@@ -727,7 +727,7 @@ export function BorrowPage() {
                 </button>
               </div>
               <p className="mt-4 font-mono text-[11px] leading-relaxed text-[var(--color-ink-faint)]">
-                LP fees are not collected here. Collect after the NFT returns.
+                LP fees are not auto-collected. You can claim them once your position NFT is returned to your wallet.
               </p>
             </section>
           ) : null}
@@ -794,18 +794,17 @@ export function BorrowPage() {
                   )}
                 </DataRow>
                 <p className="mt-4 font-mono text-[10px] leading-relaxed text-[var(--color-ink-faint)]">
-                  Priced 1:1, no oracle. Only ltvBps, aprBps and expiry leave the TEE.
+                  Priced 1:1, no oracle. Only verified LTV, APR, and expiry leave the confidential enclave.
                 </p>
               </div>
             ) : validPhase === "locked" ? (
               <div className="flex flex-col items-center gap-4 py-8 text-center">
                 <Spinner className="size-8" />
                 <p className="font-mono text-sm text-[var(--color-ink)]">
-                  Personal LTV computed in TEE…
+                  Computing personal terms in confidential enclave…
                 </p>
                 <p className="font-mono text-[11px] leading-relaxed text-[var(--color-ink-dim)]">
-                  A relayer triggers the confidential workflow. Polling on-chain for terms — this is
-                  not manual.
+                  A relayer triggers the confidential workflow. Polling on-chain for finalized terms automatically.
                 </p>
               </div>
             ) : validPhase === "found" || validPhase === "approved" ? (
@@ -816,18 +815,17 @@ export function BorrowPage() {
                   </span>
                 </DataRow>
                 <DataRow label="LTV">
-                  <span className="text-[var(--color-ink-dim)]">Unknown until CRE report</span>
+                  <span className="text-[var(--color-ink-dim)]">Computed upon locking</span>
                 </DataRow>
                 <p className="mt-4 font-mono text-[11px] leading-relaxed text-[var(--color-ink-faint)]">
-                  On-chain preview only. 1:1 collateral value is computed by the vault when the
-                  report lands — LTV is not invented here.
+                  On-chain preview only. Collateral value is computed by the vault once confidential loan terms are settled.
                 </p>
               </div>
             ) : (
               <div className="py-8 text-center">
-                <p className="font-mono text-sm text-[var(--color-ink-dim)]">No terms yet.</p>
+                <p className="font-mono text-sm text-[var(--color-ink-dim)]">No terms to display.</p>
                 <p className="mt-2 font-mono text-[11px] leading-relaxed text-[var(--color-ink-faint)]">
-                  Pick a position, then lock to request terms from the confidential workflow.
+                  Select a position and lock it to request custom loan terms.
                 </p>
               </div>
             )}
@@ -869,8 +867,7 @@ export function BorrowPage() {
             <section className="border border-[var(--color-ok)] bg-[color-mix(in_srgb,var(--color-ok)_8%,var(--color-panel))] p-6">
               <p className="font-mono text-sm text-[var(--color-ok)]">Loan repaid</p>
               <p className="mt-2 font-mono text-[11px] leading-relaxed text-[var(--color-ink-dim)]">
-                ownerOf returned to your wallet. You can now collect accrued LP fees directly from
-                the position.
+                Your position NFT has been returned to your wallet. You can now collect accrued LP fees directly from the position.
               </p>
             </section>
           ) : null}
@@ -891,7 +888,7 @@ export function BorrowPage() {
       <ConfirmModal
         open={repayConfirm}
         title="Repay loan"
-        amountLabel="repayAmount"
+        amountLabel="Repay Amount"
         amount={`${formatToken(repayAmount, LOAN_TOKEN_DECIMALS)} ${LOAN_TOKEN_SYMBOL}`}
         confirmLabel="Confirm repay"
         danger
@@ -901,7 +898,7 @@ export function BorrowPage() {
           void repay();
         }}
       >
-        Repay principal plus flat interest to close the loan and return the NFT to your wallet.
+        Repay principal plus interest to close the loan and return your position NFT to your wallet.
       </ConfirmModal>
     </div>
   );
@@ -928,25 +925,25 @@ function Stepper({
   const stages = [
     {
       title: "Approve NFT",
-      sub: "PositionManager → vault",
+      sub: "Authorize vault to hold position",
       done: idx > 0,
       current: phase === "found",
     },
     {
       title: "Lock position",
-      sub: "lockPosition(positionId)",
+      sub: "Deposit position into vault",
       done: idx > 1,
       current: phase === "approved",
     },
     {
-      title: "Waiting for CRE report",
-      sub: "relayer → handlerInTee",
+      title: "Awaiting confidential terms",
+      sub: "Enclave evaluates credit profile",
       done: idx > 2,
       current: phase === "locked",
     },
     {
-      title: "Loan active / terms",
-      sub: "principal disbursed",
+      title: "Loan active",
+      sub: "Principal disbursed to wallet",
       done: phase === "active" || phase === "repaid" || phase === "liquidated",
       current: phase === "active",
     },

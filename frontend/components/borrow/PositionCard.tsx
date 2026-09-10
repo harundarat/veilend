@@ -86,7 +86,7 @@ export function PositionCard({
           {formatLiquidity(position.liquidity)}
         </span>
         <span className="block mt-1">
-          1:1 value is set by the vault when the CRE report lands.
+          Collateral value is calculated once confidential terms are finalized.
         </span>
       </p>
       {locked ? (
