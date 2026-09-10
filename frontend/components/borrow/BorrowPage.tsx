@@ -173,6 +173,7 @@ export function BorrowPage() {
 
   const [positionInput, setPositionInput] = useState(() => searchParams.get("id") ?? "");
   const [submittedId, setSubmittedId] = useState<bigint | null>(null);
+  const [extraByWallet, setExtraByWallet] = useState<Record<string, string[]>>({});
   const [pending, setPending] = useState<PendingKind | null>(null);
   const [lastTx, setLastTx] = useState<string | null>(null);
   const [faucetOpen, setFaucetOpen] = useState(false);
@@ -182,7 +183,8 @@ export function BorrowPage() {
 
   const tokenId = submittedId ?? BigInt(0);
   const readsEnabled = submittedId !== null && Boolean(address) && (connected || wrongNetwork);
-  const discovered = useDiscoveredPositions({ wallet: address, chainId });
+  const extraIds = address ? (extraByWallet[address.toLowerCase()] ?? []) : [];
+  const discovered = useDiscoveredPositions({ wallet: address, chainId, extraIds });
   const hydrateKey = unionTokenIds(
     discovered.tokenIds,
     submittedId != null ? [submittedId.toString()] : [],
@@ -339,7 +341,9 @@ export function BorrowPage() {
     setDismissed(false);
     setTxFailed(false);
     setLastTx(null);
-    setSubmittedId(BigInt(raw));
+    const id = BigInt(raw);
+    setSubmittedId(id);
+    rememberId(id);
   };
 
   const run = async (kind: PendingKind, title: string, request: Parameters<typeof runTx>[1]) => {
@@ -360,11 +364,23 @@ export function BorrowPage() {
     }
   };
 
+  const rememberId = (id: bigint) => {
+    if (!address) return;
+    const key = address.toLowerCase();
+    const value = id.toString();
+    setExtraByWallet((current) => {
+      const existing = current[key] ?? [];
+      if (existing.includes(value)) return current;
+      return { ...current, [key]: [...existing, value] };
+    });
+  };
+
   const selectPosition = (id: bigint) => {
     setPositionInput(id.toString());
     setSubmittedId(id);
     setDismissed(false);
     setTxFailed(false);
+    rememberId(id);
   };
 
   const approveNft = (id = submittedId) => {
@@ -377,14 +393,16 @@ export function BorrowPage() {
     });
   };
 
-  const lockPosition = (id = submittedId) => {
+  const lockPosition = async (id = submittedId) => {
     if (id == null) return;
-    return run("lock", "Lock position", {
+    const hash = await run("lock", "Lock position", {
       address: ADDRESSES.vault,
       abi: vaultAbi,
       functionName: "lockPosition",
       args: [id],
     });
+    if (hash) rememberId(id);
+    return hash;
   };
 
   const lockAndRequest = async (id: bigint) => {

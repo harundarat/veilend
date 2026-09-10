@@ -9,9 +9,11 @@ import { fetchPositionIds, unionTokenIds } from "@/lib/positions/discover";
 export function useDiscoveredPositions({
   wallet,
   chainId,
+  extraIds = [],
 }: {
   wallet?: Address;
   chainId: number;
+  extraIds?: readonly string[];
 }) {
   const sepoliaOk = chainId === sepolia.id;
   const enabled = Boolean(wallet) && sepoliaOk;
@@ -19,6 +21,7 @@ export function useDiscoveredPositions({
   const query = useQuery({
     queryKey: ["veilend-positions", wallet, chainId],
     enabled,
+    refetchOnReconnect: true,
     queryFn: async () => {
       if (!wallet) return { tokenIds: [] as string[], unavailable: true };
       const [owned, vault] = await Promise.all([
@@ -33,7 +36,7 @@ export function useDiscoveredPositions({
   });
 
   return {
-    tokenIds: query.data?.tokenIds ?? [],
+    tokenIds: unionTokenIds(query.data?.tokenIds ?? [], extraIds),
     unavailable: !sepoliaOk || query.isError || Boolean(query.data?.unavailable),
     isLoading: enabled && query.isPending,
     refetch: query.refetch,
