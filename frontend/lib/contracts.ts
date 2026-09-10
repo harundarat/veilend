@@ -65,6 +65,8 @@ export const positionManagerAbi = parseAbi([
 export const vaultAbi = parseAbi([
   "function lockPosition(uint256 positionId)",
   "function repayLoan(uint256 positionId)",
+  "function liquidate(uint256 positionId)",
+  "function withdrawSeizedLiquidity(uint256 positionId)",
   "function getLoan(uint256 positionId) view returns ((address borrower, uint256 positionId, uint256 ltvBps, uint256 aprBps, uint256 expiry, uint256 defaultDeadline, uint256 collateralValue, uint256 principal, bool active, bool locked, bool repaid, bool liquidated))",
 ]);
 

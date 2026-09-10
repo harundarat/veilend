@@ -136,6 +136,55 @@ export function isWalletLoan(loan: VaultLoan | undefined, wallet?: Address) {
   return isBorrowerOf(loan, wallet) && loanUiStatus(loan) !== null;
 }
 
+export type LiquidateUiStatus = "active" | "eligible" | "liquidated" | "withdrawn";
+
+export const LIQUIDATE_STATUS_META: Record<
+  LiquidateUiStatus,
+  { label: string; color: string }
+> = {
+  active: { label: "NOT ELIGIBLE", color: "var(--color-ink-faint)" },
+  eligible: { label: "LIQUIDATE", color: "var(--color-danger)" },
+  liquidated: { label: "WITHDRAW", color: "var(--color-warn)" },
+  withdrawn: { label: "CLOSED", color: "var(--color-ink-dim)" },
+};
+
+export type LiquidateAction = "liquidate" | "withdraw" | "closed" | "ineligible";
+
+export function liquidateAction(status: LiquidateUiStatus | null): LiquidateAction {
+  if (status === "eligible") return "liquidate";
+  if (status === "liquidated") return "withdraw";
+  if (status === "withdrawn") return "closed";
+  return "ineligible";
+}
+
+export function isLiquidateActionable(status: LiquidateUiStatus | null) {
+  return status === "eligible" || status === "liquidated";
+}
+
+export function isSeizedWithdrawn(loan: VaultLoan | undefined, owner?: Address) {
+  if (!loan?.liquidated) return false;
+  return !sameAddress(owner, ADDRESSES.vault);
+}
+
+export function isLiquidateEligible(loan: VaultLoan | undefined, nowMs: number) {
+  if (!loan) return false;
+  if (loan.liquidated || loan.repaid) return false;
+  if (!loan.active || loan.principal <= BigInt(0)) return false;
+  if (loan.defaultDeadline <= BigInt(0)) return false;
+  return nowMs > Number(loan.defaultDeadline) * 1000;
+}
+
+export function liquidateUiStatus(
+  loan: VaultLoan | undefined,
+  owner: Address | undefined,
+  nowMs: number,
+): LiquidateUiStatus | null {
+  if (!hasLoan(loan) || !loan || loan.repaid) return null;
+  if (loan.liquidated) return isSeizedWithdrawn(loan, owner) ? "withdrawn" : "liquidated";
+  if (isLiquidateEligible(loan, nowMs)) return "eligible";
+  return "active";
+}
+
 export function derivePhase(
   loan: VaultLoan | undefined,
   owner: Address | undefined,
