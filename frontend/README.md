@@ -1,5 +1,7 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+Position discovery on Borrow uses a server-only `ALCHEMY_API_KEY` (Sepolia NFT API). Put it in `frontend/.env.local` and restart the dev server — never `NEXT_PUBLIC_*`.
+
 ## Getting Started
 
 First, run the development server:
