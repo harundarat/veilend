@@ -435,10 +435,10 @@ function ActionPanel({
           withdraw the seized liquidity.
         </p>
         <Link
-          href={`/liquidate?positionId=${loan.positionId.toString()}`}
+          href={`/liquidate?id=${loan.positionId.toString()}`}
           className="mt-5 flex w-full items-center justify-center gap-2 border border-[var(--color-danger)] bg-[var(--color-danger)] px-5 py-2.5 font-mono text-xs font-semibold uppercase tracking-wider text-[var(--color-ground)] transition-colors hover:bg-[var(--color-danger-dim)]"
         >
-          Liquidate this loan
+          Liquidate on Liquidate page
         </Link>
       </section>
     );

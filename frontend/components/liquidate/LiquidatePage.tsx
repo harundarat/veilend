@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { useQueryClient } from "@tanstack/react-query";
 import { useChainId } from "wagmi";
 import { ConfirmModal } from "@/components/shell/ConfirmModal";
@@ -524,6 +525,12 @@ export function LiquidatePage({ positionId }: { positionId?: string }) {
                   onWithdraw={() => void run("withdraw", selectedRow.loan)}
                 />
               </div>
+              <Link
+                href={`/loan/${selectedRow.tokenId.toString()}`}
+                className="mt-4 inline-flex font-mono text-[11px] uppercase tracking-widest text-[var(--color-ink-dim)] underline decoration-[var(--color-hairline-hi)] underline-offset-4 hover:text-[var(--color-acid)]"
+              >
+                Inspect loan
+              </Link>
             </section>
           ) : (
             <div className="border border-dashed border-[var(--color-hairline-hi)] bg-[var(--color-panel)] p-8 text-center">
