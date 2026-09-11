@@ -90,6 +90,14 @@ function dateFmt(ms: number) {
   });
 }
 
+function gracePeriodLabel(seconds: number) {
+  if (seconds % 60 === 0) {
+    const minutes = seconds / 60;
+    return `${minutes} ${minutes === 1 ? "minute" : "minutes"}`;
+  }
+  return `${seconds} seconds`;
+}
+
 function StatusBadge({ status }: { status: LoanUiStatus }) {
   const meta = LOAN_STATUS_META[status];
   return (
@@ -795,7 +803,7 @@ function LoanDetail({ rawId }: { rawId: string }) {
             </div>
             <div className="grid grid-cols-2 gap-px overflow-hidden border border-[var(--color-hairline)] bg-[var(--color-hairline)] sm:grid-cols-3">
               <Metric
-                label="collateralValue"
+                label="Collateral value"
                 value={
                   hasTerms
                     ? formatToken(loan.collateralValue, LOAN_TOKEN_DECIMALS)
@@ -806,17 +814,17 @@ function LoanDetail({ rawId }: { rawId: string }) {
                 sub="amount0 + amount1 · 1:1"
               />
               <Metric
-                label="ltvBps"
-                value={hasTerms ? loan.ltvBps.toString() : "—"}
-                sub={hasTerms ? formatBps(loan.ltvBps) : "awaiting CRE report"}
+                label="LTV"
+                value={hasTerms ? formatBps(loan.ltvBps) : "—"}
+                sub={hasTerms ? `${loan.ltvBps.toString()} bps` : "awaiting CRE report"}
               />
               <Metric
-                label="aprBps"
-                value={hasTerms ? loan.aprBps.toString() : "—"}
-                sub={hasTerms ? formatBps(loan.aprBps) : "awaiting CRE report"}
+                label="APR"
+                value={hasTerms ? formatBps(loan.aprBps) : "—"}
+                sub={hasTerms ? `${loan.aprBps.toString()} bps` : "awaiting CRE report"}
               />
               <Metric
-                label="principal"
+                label="Principal"
                 value={
                   hasTerms ? formatToken(loan.principal, LOAN_TOKEN_DECIMALS) : "—"
                 }
@@ -824,37 +832,61 @@ function LoanDetail({ rawId }: { rawId: string }) {
                 accent
               />
               <Metric
-                label="repayAmount"
+                label="Repay amount"
                 value={hasTerms ? formatToken(repayAmount, LOAN_TOKEN_DECIMALS) : "—"}
-                sub="principal + principal×aprBps/10000"
-              />
-              <Metric
-                label="Countdown"
-                value={
-                  deadlineMs > 0 && status === "active" ? (
-                    <Countdown deadlineMs={deadlineMs} />
-                  ) : status === "locked" ? (
-                    "—"
-                  ) : (
-                    <span className="text-[var(--color-ink-dim)]">Loan closed</span>
-                  )
+                sub={
+                  hasTerms
+                    ? `includes ${formatBps(loan.aprBps)} flat interest`
+                    : "principal + flat interest"
                 }
-                sub="to defaultDeadline"
               />
+              {status === "active" ? (
+                <Metric
+                  label="Countdown"
+                  value={
+                    deadlineMs > 0 ? (
+                      <Countdown deadlineMs={deadlineMs} />
+                    ) : (
+                      "—"
+                    )
+                  }
+                  sub="to default deadline"
+                />
+              ) : status === "locked" ? (
+                <Metric
+                  label="Countdown"
+                  value="—"
+                  sub="starts after terms"
+                />
+              ) : (
+                <Metric
+                  label="Outcome"
+                  value={status === "repaid" ? "Repaid" : "Liquidated"}
+                  sub={
+                    status === "repaid"
+                      ? logsQuery.data?.repaid?.at
+                        ? dateFmt(logsQuery.data.repaid.at)
+                        : "NFT returned to borrower"
+                      : logsQuery.data?.liquidated?.at
+                        ? dateFmt(logsQuery.data.liquidated.at)
+                        : "past default deadline"
+                  }
+                />
+              )}
             </div>
             <div className="mt-px grid grid-cols-1 gap-px overflow-hidden border border-t-0 border-[var(--color-hairline)] bg-[var(--color-hairline)] sm:grid-cols-2">
               <Metric
-                label="expiry"
+                label="Expiry"
                 value={
                   <span className="text-sm">{expiryMs > 0 ? dateFmt(expiryMs) : "—"}</span>
                 }
               />
               <Metric
-                label="defaultDeadline"
+                label="Default deadline"
                 value={
                   <span className="text-sm">{deadlineMs > 0 ? dateFmt(deadlineMs) : "—"}</span>
                 }
-                sub={`expiry + GRACE_PERIOD (${GRACE_PERIOD_SECONDS}s)`}
+                sub={`expiry + ${gracePeriodLabel(GRACE_PERIOD_SECONDS)} grace period (${GRACE_PERIOD_SECONDS}s)`}
               />
             </div>
             <p className="mt-3 flex items-center gap-2 font-mono text-[11px] text-[var(--color-ink-faint)]">
