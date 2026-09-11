@@ -29,19 +29,29 @@ import { useNow } from "@/lib/use-now";
 import { useWalletUi } from "@/lib/use-wallet-ui";
 import { useWriteTx } from "@/lib/use-write-tx";
 
-type Filter = "all" | "eligible" | "liquidated";
+type Filter = "all" | "eligible" | "liquidated" | "closed";
 type PendingKind = "liquidate" | "withdraw";
 
 const FILTERS: { key: Filter; label: string }[] = [
   { key: "all", label: "All" },
-  { key: "eligible", label: "Eligible now" },
-  { key: "liquidated", label: "Pending withdrawal" },
+  { key: "eligible", label: "Eligible to liquidate" },
+  { key: "liquidated", label: "Awaiting withdrawal" },
+  { key: "closed", label: "Closed" },
 ];
 
 function relativeDeadline(deadlineMs: number, now: number) {
   if (now <= 0 || deadlineMs <= 0) return { text: "—", overdue: false };
   const diff = deadlineMs - now;
-  if (diff <= 0) return { text: "Overdue", overdue: true };
+  if (diff <= 0) {
+    const elapsed = Math.abs(diff);
+    const m = Math.floor(elapsed / 60_000);
+    const h = Math.floor(m / 60);
+    const d = Math.floor(h / 24);
+    if (d > 0) return { text: `Overdue (${d}d ${h % 24}h ago)`, overdue: true };
+    if (h > 0) return { text: `Overdue (${h}h ${m % 60}m ago)`, overdue: true };
+    if (m > 0) return { text: `Overdue (${m}m ago)`, overdue: true };
+    return { text: "Overdue (just now)", overdue: true };
+  }
   const m = Math.floor(diff / 60_000);
   const h = Math.floor(m / 60);
   const d = Math.floor(h / 24);
@@ -69,15 +79,15 @@ function dateFmt(ms: number) {
 function actionCopy(status: LiquidateUiStatus) {
   const action = liquidateAction(status);
   if (action === "liquidate") {
-    return "This loan is overdue. Triggering liquidation marks the position as defaulted and unlocks the vault — no borrower action needed. A follow-up transaction will claim the underlying liquidity.";
+    return "This loan is overdue and past its grace period. Triggering liquidation marks the position as defaulted and unlocks the position hook — no borrower action needed. A follow-up transaction will burn the position NFT and return underlying collateral to the vault.";
   }
   if (action === "withdraw") {
-    return "Liquidation already recorded. Withdraw now to claim the seized liquidity — this burns the position NFT and transfers the token pair into the vault. One transaction, no partial fills.";
+    return "Liquidation already recorded. Withdraw now to burn the position NFT and transfer the seized token pair back into the lending vault. One transaction, no partial fills.";
   }
   if (action === "closed") {
-    return "No further actions available. The position was liquidated and the seized liquidity has been withdrawn.";
+    return "No further actions needed. The position was liquidated and its seized liquidity has been returned to the vault.";
   }
-  return "This loan is still within the repayment window. Liquidation is unavailable until the repay deadline passes.";
+  return "This loan is still within its repayment window and grace period. Liquidation is unavailable until the default deadline passes.";
 }
 
 function DetailRow({ label, children }: { label: string; children: React.ReactNode }) {
@@ -150,12 +160,26 @@ function TableSkeleton() {
   );
 }
 
-function EmptyLoans() {
+function EmptyLoans({ filter }: { filter: Filter }) {
+  const message = useMemo(() => {
+    switch (filter) {
+      case "eligible":
+        return "No loans currently eligible for liquidation.";
+      case "liquidated":
+        return "No loans awaiting liquidity withdrawal.";
+      case "closed":
+        return "No closed or settled liquidations found.";
+      default:
+        return "No overdue or liquidated loans found.";
+    }
+  }, [filter]);
+
   return (
     <div className="flex min-h-[40vh] flex-col items-center justify-center border border-dashed border-[var(--color-hairline-hi)] bg-[var(--color-panel)] p-10 text-center">
-      <p className="font-mono text-sm text-[var(--color-ink)]">No overdue loans.</p>
-      <p className="mt-2 font-mono text-[11px] text-[var(--color-ink-dim)]">
-        Grace period: {Math.floor(GRACE_PERIOD_SECONDS / 60)} minutes.
+      <p className="font-mono text-sm text-[var(--color-ink)]">{message}</p>
+      <p className="mt-2 max-w-md font-mono text-[11px] leading-relaxed text-[var(--color-ink-dim)]">
+        Loans become eligible for liquidation once the repayment window and the{" "}
+        {Math.floor(GRACE_PERIOD_SECONDS / 60)}-minute grace period have elapsed.
       </p>
     </div>
   );
@@ -208,7 +232,9 @@ function ActionButton({
   const needWallet = !canWrite && (action === "liquidate" || action === "withdraw");
   const gate =
     walletState === "disconnected" || walletState === "wrong-network"
-      ? "Connect wallet on Sepolia to liquidate."
+      ? action === "withdraw"
+        ? "Connect wallet on Sepolia to withdraw liquidity."
+        : "Connect wallet on Sepolia to liquidate."
       : null;
 
   if (action === "closed") {
@@ -228,10 +254,10 @@ function ActionButton({
       <button
         type="button"
         disabled
-        title="Loan is not past its defaultDeadline yet"
+        title="Loan has not passed its default deadline and grace period yet"
         className="w-full cursor-not-allowed border border-[var(--color-hairline-hi)] px-5 py-2.5 font-mono text-xs uppercase tracking-wider text-[var(--color-ink-faint)] opacity-60"
       >
-        Not eligible — {relText}
+        Eligible {relText}
       </button>
     );
   }
@@ -319,8 +345,9 @@ export function LiquidatePage({ positionId }: { positionId?: string }) {
     return hydrated.rows.filter((row) => {
       const status = liquidateUiStatus(row.loan, row.owner, now);
       if (!status) return false;
-      if (filter === "eligible") return isLiquidateActionable(status);
-      if (filter === "liquidated") return status === "withdrawn";
+      if (filter === "eligible") return status === "eligible";
+      if (filter === "liquidated") return status === "liquidated";
+      if (filter === "closed") return status === "withdrawn";
       return true;
     });
   }, [hydrated.rows, filter, now]);
@@ -364,14 +391,14 @@ export function LiquidatePage({ positionId }: { positionId?: string }) {
           Liquidate
         </span>
         <h1 className="mt-3 font-mono text-3xl font-bold tracking-tight text-[var(--color-ink)] md:text-4xl">
-          Close overdue loans
+          Liquidate overdue loans
         </h1>
         <p className="mt-4 text-sm leading-relaxed text-[var(--color-ink-dim)]">
-          Once the repayment deadline has passed, the position NFT has already
-          been sitting in the vault since it was locked. Liquidating does not
-          seize an NFT from the borrower&apos;s wallet — it simply withdraws the
-          underlying liquidity. Anyone can trigger it; no borrower permission is
-          required.
+          When a borrower exceeds the repayment deadline and grace period, anyone
+          can initiate liquidation. This marks the loan as defaulted, unlocks
+          the Uniswap v4 position, and allows the seized collateral to be
+          reclaimed directly into the lending vault to protect lender solvency.
+          No borrower permission is required.
         </p>
       </header>
 
@@ -397,7 +424,7 @@ export function LiquidatePage({ positionId }: { positionId?: string }) {
           {gridLoading ? (
             <TableSkeleton />
           ) : filtered.length === 0 ? (
-            <EmptyLoans />
+            <EmptyLoans filter={filter} />
           ) : (
             <div className="overflow-hidden border border-[var(--color-hairline)]">
               <div className="hidden grid-cols-[1fr_1.2fr_1fr_1.1fr_auto] gap-4 border-b border-[var(--color-hairline)] bg-[var(--color-panel-hi)] px-4 py-3 font-mono text-[10px] uppercase tracking-widest text-[var(--color-ink-faint)] md:grid">
@@ -405,7 +432,7 @@ export function LiquidatePage({ positionId }: { positionId?: string }) {
                 <span>Borrower</span>
                 <span>Principal</span>
                 <span>Deadline</span>
-                <span className="text-right">Action</span>
+                <span className="text-right">Status</span>
               </div>
               {filtered.map((row) => {
                 const status = liquidateUiStatus(row.loan, row.owner, now) ?? "active";
@@ -492,7 +519,7 @@ export function LiquidatePage({ positionId }: { positionId?: string }) {
                   {formatToken(selectedRow.loan.principal, LOAN_TOKEN_DECIMALS)} {LOAN_TOKEN_SYMBOL}
                 </span>
               </DetailRow>
-              <DetailRow label="Repay Deadline">
+              <DetailRow label="Default Deadline">
                 <span
                   className={`text-right ${
                     selectedRel.overdue && liquidateAction(selectedStatus) !== "closed"
@@ -530,7 +557,7 @@ export function LiquidatePage({ positionId }: { positionId?: string }) {
                 href={`/loan/${selectedRow.tokenId.toString()}`}
                 className="mt-4 inline-flex font-mono text-[11px] uppercase tracking-widest text-[var(--color-ink-dim)] underline decoration-[var(--color-hairline-hi)] underline-offset-4 hover:text-[var(--color-acid)]"
               >
-                Inspect loan
+                View loan details &rarr;
               </Link>
             </section>
           ) : (
@@ -539,7 +566,7 @@ export function LiquidatePage({ positionId }: { positionId?: string }) {
                 Position #{selected} not found
               </p>
               <p className="mt-2 font-mono text-[11px] text-[var(--color-ink-faint)]">
-                This loan may have already been repaid, or it isn&apos;t eligible for liquidation.
+                This position may not have an active loan, was already repaid, or does not exist.
               </p>
             </div>
           )}
@@ -553,7 +580,7 @@ export function LiquidatePage({ positionId }: { positionId?: string }) {
             ? `Liquidate position #${selectedRow.tokenId.toString()}`
             : "Liquidate"
         }
-        amountLabel="loan principal"
+        amountLabel="Defaulted Principal"
         amount={
           selectedRow
             ? `${formatToken(selectedRow.loan.principal, LOAN_TOKEN_DECIMALS)} ${LOAN_TOKEN_SYMBOL}`
@@ -567,8 +594,9 @@ export function LiquidatePage({ positionId }: { positionId?: string }) {
           void run("liquidate", selectedRow.loan);
         }}
       >
-        All-or-nothing — this withdraws the full seized liquidity in one transaction. Not an
-        auction, not a partial liquidation.
+        This transaction marks the loan as defaulted and unlocks the Uniswap v4 position
+        hook. Seized collateral will then be eligible for withdrawal back into the vault. As a
+        caller, you only pay gas.
       </ConfirmModal>
     </div>
   );

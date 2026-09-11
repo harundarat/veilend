@@ -143,8 +143,8 @@ export const LIQUIDATE_STATUS_META: Record<
   { label: string; color: string }
 > = {
   active: { label: "NOT ELIGIBLE", color: "var(--color-ink-faint)" },
-  eligible: { label: "LIQUIDATE", color: "var(--color-danger)" },
-  liquidated: { label: "WITHDRAW", color: "var(--color-warn)" },
+  eligible: { label: "ELIGIBLE", color: "var(--color-danger)" },
+  liquidated: { label: "PENDING WITHDRAWAL", color: "var(--color-warn)" },
   withdrawn: { label: "CLOSED", color: "var(--color-ink-dim)" },
 };
 

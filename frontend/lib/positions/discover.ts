@@ -1,6 +1,7 @@
 import { type Address, isAddress } from "viem";
 
-export const DISCOVERY_UNAVAILABLE = "position discovery unavailable";
+export const DISCOVERY_UNAVAILABLE =
+  "Automated position discovery is currently unavailable. You can inspect positions directly by ID.";
 
 export type DiscoverResult = {
   tokenIds: string[];
