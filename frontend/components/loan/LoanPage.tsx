@@ -811,7 +811,7 @@ function LoanDetail({ rawId }: { rawId: string }) {
                       ? "—"
                       : formatToken(loan.collateralValue, LOAN_TOKEN_DECIMALS)
                 }
-                sub="amount0 + amount1 · 1:1"
+                sub={LOAN_TOKEN_SYMBOL}
               />
               <Metric
                 label="LTV"
