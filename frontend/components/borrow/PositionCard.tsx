@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { formatLiquidity } from "@/lib/format";
 import {
   pairLabel,
   type HydratedPosition,
@@ -80,15 +79,11 @@ export function PositionCard({
       <p className="mt-3 font-mono text-xs uppercase tracking-widest text-[var(--color-ink-dim)]">
         {pairLabel(position.poolKey)}
       </p>
-      <p className="mt-1 font-mono text-[11px] text-[var(--color-ink-faint)]">
-        Liquidity{" "}
-        <span className="tabular-nums text-[var(--color-ink)]">
-          {formatLiquidity(position.liquidity)}
-        </span>
-        <span className="block mt-1">
-          Collateral value is calculated once confidential terms are finalized.
-        </span>
-      </p>
+      {locked ? null : (
+        <p className="mt-1 font-mono text-[11px] leading-relaxed text-[var(--color-ink-faint)]">
+          LTV and principal are set after you lock — scored privately.
+        </p>
+      )}
       {locked ? (
         <Link
           href={`/loan/${position.tokenId.toString()}`}
