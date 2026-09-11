@@ -58,7 +58,7 @@ const STATUS_META: Record<
   { label: string; color: string }
 > = {
   idle: { label: "Idle", color: "var(--color-ink-dim)" },
-  locked: { label: "Locked — waiting CRE", color: "var(--color-warn)" },
+  locked: { label: "Locked — Assessing terms", color: "var(--color-warn)" },
   active: { label: "Active", color: "var(--color-acid)" },
   repaid: { label: "Repaid", color: "var(--color-ok)" },
   liquidated: { label: "Liquidated", color: "var(--color-danger)" },

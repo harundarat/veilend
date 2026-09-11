@@ -20,7 +20,7 @@ export type CardStatus = "eligible" | "locked";
 export type LoanUiStatus = "locked" | "active" | "repaid" | "liquidated";
 
 export const LOAN_STATUS_META: Record<LoanUiStatus, { label: string; color: string }> = {
-  locked: { label: "Locked — waiting CRE", color: "var(--color-warn)" },
+  locked: { label: "Locked — Assessing terms", color: "var(--color-warn)" },
   active: { label: "Active", color: "var(--color-acid)" },
   repaid: { label: "Repaid", color: "var(--color-ok)" },
   liquidated: { label: "Liquidated", color: "var(--color-danger)" },

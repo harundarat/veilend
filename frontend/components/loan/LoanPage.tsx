@@ -205,7 +205,7 @@ function NotFoundState({ id }: { id: string }) {
           Loan not found
         </h1>
         <p className="mt-3 text-sm leading-relaxed text-[var(--color-ink-dim)]">
-          No loan exists for positionId #{id}. Check the ID or start one from Borrow.
+          No loan found for position #{id}. Check the position ID or start a new loan from Borrow.
         </p>
         <div className="mt-6 flex gap-3">
           <Link
@@ -246,36 +246,36 @@ function buildTimeline(loan: VaultLoan, logs: LoanLogs | undefined): TimelineIte
       ? logs?.seized
         ? "Liquidated → Liquidity withdrawn"
         : "Liquidated"
-      : "Repaid or Liquidated";
+      : "Loan settlement";
   const closedDetail = loan.repaid
     ? "Flat interest paid — NFT returned to borrower"
     : loan.liquidated
       ? logs?.seized
-        ? "Past defaultDeadline — seized liquidity withdrawn"
-        : "Past defaultDeadline — awaiting withdrawSeizedLiquidity"
-      : "Loan not yet resolved";
+        ? "Past default deadline — seized collateral withdrawn"
+        : "Past default deadline — awaiting liquidity claim by liquidator"
+      : "Awaiting borrower repayment before default deadline";
 
   return [
     {
       key: "locked",
-      label: "Locked",
-      detail: "NFT moved to LendingVault",
+      label: "Position locked",
+      detail: "LP NFT transferred to LendingVault as collateral",
       txHash: logs?.locked?.hash ?? null,
       at: logs?.locked?.at ?? null,
       done: lockedDone,
     },
     {
       key: "report",
-      label: "Credit report submitted",
-      detail: "CRE confidential workflow returned (ltvBps, aprBps, expiry)",
+      label: "Credit assessment completed",
+      detail: "Chainlink CRE evaluated risk in TEE and finalized terms (LTV, APR, expiry)",
       txHash: logs?.report?.hash ?? null,
       at: logs?.report?.at ?? null,
       done: reportDone,
     },
     {
       key: "disbursed",
-      label: "Disbursed",
-      detail: "Principal transferred to borrower",
+      label: "Principal disbursed",
+      detail: "Loan principal transferred to borrower wallet",
       txHash: logs?.report?.hash ?? null,
       at: logs?.report?.at ?? null,
       done: reportDone,
@@ -394,8 +394,8 @@ function ActionPanel({
         </h2>
         <p className="mt-3 text-sm leading-relaxed text-[var(--color-ink-dim)]">
           {status === "repaid"
-            ? "This loan was repaid with flat interest. The position NFT has been returned to the borrower and LP fees can be collected directly from the position."
-            : "This loan passed its defaultDeadline and was liquidated. Seized liquidity has been withdrawn from the vault."}
+            ? "This loan was fully repaid with flat interest. The position NFT has been returned to the borrower wallet and LP fees can now be collected directly from the position."
+            : "This loan exceeded its default deadline and was liquidated. The position NFT has been burned and seized liquidity reclaimed by the vault."}
         </p>
         <button
           type="button"
@@ -415,15 +415,16 @@ function ActionPanel({
           Awaiting Credit Assessment
         </h2>
         <p className="mt-3 text-sm leading-relaxed text-[var(--color-ink-dim)]">
-          Your loan terms are being assessed privately via the Chainlink CRE TEE. A relayer writes
-          the result on-chain automatically. Repay becomes available once funds are disbursed.
+          Your loan terms are being assessed privately via Chainlink CRE in a secure enclave (TEE). A relayer writes
+          the result on-chain automatically. Repayment becomes available once funds are disbursed.
         </p>
         <button
           type="button"
           disabled
-          className="mt-5 w-full cursor-not-allowed border border-[var(--color-hairline-hi)] px-5 py-2.5 font-mono text-xs uppercase tracking-wider text-[var(--color-ink-faint)] opacity-60"
+          className="mt-5 flex w-full items-center justify-center gap-2 border border-[var(--color-hairline-hi)] px-5 py-2.5 font-mono text-xs uppercase tracking-wider text-[var(--color-ink-faint)] opacity-60"
         >
-          Repay unavailable
+          <Spinner className="size-3.5" />
+          Awaiting disbursement…
         </button>
       </section>
     );
@@ -439,8 +440,7 @@ function ActionPanel({
           </h2>
         </div>
         <p className="mt-3 text-sm leading-relaxed text-[var(--color-ink-dim)]">
-          The repay window has closed (now &gt; defaultDeadline). Anyone may liquidate this loan and
-          withdraw the seized liquidity.
+          The repayment window and grace period have ended. This loan is now defaulted and eligible for liquidation by any participant.
         </p>
         <Link
           href={`/liquidate?id=${loan.positionId.toString()}`}
@@ -460,8 +460,8 @@ function ActionPanel({
         </h2>
         <p className="mt-3 text-sm leading-relaxed text-[var(--color-ink-dim)]">
           {connected
-            ? "Only the borrower can repay this loan. Connect the borrower wallet to repay."
-            : "Connect the borrower wallet to repay this loan."}
+            ? `This loan belongs to borrower ${truncateAddress(loan.borrower)}. Connect or switch to the borrower wallet to make a repayment.`
+            : "Connect the borrower wallet to manage or repay this loan."}
         </p>
         <button
           type="button"
@@ -476,11 +476,11 @@ function ActionPanel({
   }
 
   return (
-    <section className="border-2 border-[var(--color-danger-dim)] bg-[color-mix(in_srgb,var(--color-danger)_6%,var(--color-panel))] p-6">
-      <h2 className="font-mono text-sm uppercase tracking-widest text-[var(--color-ink)]">Repay</h2>
+    <section className="border border-[var(--color-hairline-hi)] bg-[var(--color-panel)] p-6">
+      <h2 className="font-mono text-sm uppercase tracking-widest text-[var(--color-ink)]">Repay loan</h2>
       <div className="mt-4 flex items-baseline justify-between border-b border-[var(--color-hairline)] pb-3">
         <span className="font-mono text-[11px] uppercase tracking-widest text-[var(--color-ink-dim)]">
-          Amount to repay
+          Total repayment
         </span>
         <span className="font-mono text-xl font-bold tabular-nums text-[var(--color-ink)]">
           {formatToken(repayAmount, LOAN_TOKEN_DECIMALS)}{" "}
@@ -497,21 +497,21 @@ function ActionPanel({
           className="inline-flex w-full items-center justify-center gap-2 border border-[var(--color-hairline-hi)] bg-[var(--color-panel-hi)] px-5 py-2.5 font-mono text-xs font-semibold uppercase tracking-wider text-[var(--color-ink)] transition-colors hover:border-[var(--color-ink-dim)] disabled:opacity-40"
         >
           {pending === "approve-stable" ? <Spinner className="size-4" /> : null}
-          {stableApproved ? "Stable approved" : "Approve stable"}
+          {stableApproved ? `${LOAN_TOKEN_SYMBOL} approved` : `Approve ${LOAN_TOKEN_SYMBOL}`}
         </button>
         <button
           type="button"
           onClick={onRepay}
           disabled={!canWrite || !stableApproved || pending === "repay"}
-          title={!stableApproved ? "Approve the stablecoin first" : undefined}
-          className="inline-flex w-full items-center justify-center gap-2 border border-[var(--color-danger)] bg-[var(--color-danger)] px-5 py-2.5 font-mono text-xs font-semibold uppercase tracking-wider text-[var(--color-ground)] transition-colors hover:bg-[var(--color-danger-dim)] disabled:cursor-not-allowed disabled:opacity-40"
+          title={!stableApproved ? `Approve ${LOAN_TOKEN_SYMBOL} first` : undefined}
+          className="inline-flex w-full items-center justify-center gap-2 border border-[var(--color-acid)] bg-[var(--color-acid)] px-5 py-2.5 font-mono text-xs font-semibold uppercase tracking-wider text-[var(--color-ground)] transition-colors hover:bg-[var(--color-acid-dim)] disabled:cursor-not-allowed disabled:opacity-40"
         >
           {pending === "repay" ? <Spinner className="size-4" /> : null}
-          Repay
+          Repay loan
         </button>
       </div>
       <p className="mt-4 font-mono text-[11px] leading-relaxed text-[var(--color-ink-faint)]">
-        LP fees are not collected during repayment. Once your NFT returns to your wallet, fees can be claimed directly from the position.
+        Accrued LP fees remain with your position and are not deducted during repayment. Once the NFT returns to your wallet, fees can be claimed directly from the position.
       </p>
     </section>
   );
@@ -758,10 +758,10 @@ function LoanDetail({ rawId }: { rawId: string }) {
       ? "Burned / withdrawn"
       : "—"
     : inVault
-      ? "Vault"
+      ? "LendingVault"
       : sameAddress(owner, loan.borrower)
-        ? "Wallet"
-        : "Wallet";
+        ? "Borrower wallet"
+        : "External wallet";
 
   return (
     <Shell>
@@ -850,7 +850,15 @@ function LoanDetail({ rawId }: { rawId: string }) {
                       "—"
                     )
                   }
-                  sub="to default deadline"
+                  sub={
+                    deadlineMs <= 0
+                      ? "to default deadline"
+                      : now > deadlineMs
+                        ? "past default deadline"
+                        : expiryMs > 0 && now > expiryMs
+                          ? "grace period active — repay now"
+                          : "to default deadline"
+                  }
                 />
               ) : status === "locked" ? (
                 <Metric
@@ -886,12 +894,12 @@ function LoanDetail({ rawId }: { rawId: string }) {
                 value={
                   <span className="text-sm">{deadlineMs > 0 ? dateFmt(deadlineMs) : "—"}</span>
                 }
-                sub={`expiry + ${gracePeriodLabel(GRACE_PERIOD_SECONDS)} grace period (${GRACE_PERIOD_SECONDS}s)`}
+                sub={`Includes ${gracePeriodLabel(GRACE_PERIOD_SECONDS)} grace period after expiry`}
               />
             </div>
             <p className="mt-3 flex items-center gap-2 font-mono text-[11px] text-[var(--color-ink-faint)]">
-              <span className="size-1.5 rounded-full bg-[var(--color-danger)]" />
-              Your credit score is computed privately inside a TEE and never stored on-chain.
+              <span className="size-1.5 rounded-full bg-[var(--color-acid)]" />
+              Confidential underwriting: Credit terms are calculated privately inside a Chainlink CRE TEE and never published on-chain.
             </p>
           </section>
 
@@ -930,17 +938,16 @@ function LoanDetail({ rawId }: { rawId: string }) {
       <ConfirmModal
         open={repayConfirm}
         title="Repay loan"
-        amountLabel="repayAmount"
+        amountLabel="Total repayment"
         amount={`${formatToken(repayAmount, LOAN_TOKEN_DECIMALS)} ${LOAN_TOKEN_SYMBOL}`}
         confirmLabel="Confirm repay"
-        danger
         onCancel={() => setRepayConfirm(false)}
         onConfirm={() => {
           setRepayConfirm(false);
           void repay();
         }}
       >
-        Repay principal plus flat interest to close the loan and return the NFT to your wallet.
+        Repay principal plus flat interest to close the loan and return your position NFT to your wallet.
       </ConfirmModal>
     </Shell>
   );
