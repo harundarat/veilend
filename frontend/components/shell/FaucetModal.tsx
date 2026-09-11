@@ -105,7 +105,7 @@ export function FaucetModal({ open, onClose }: { open: boolean; onClose: () => v
         </div>
 
         <p className="mt-4 font-mono text-[11px] leading-relaxed text-[var(--color-ink-faint)]">
-          Demo only. These mock tokens have a public mint for testing on Sepolia / Anvil. Demo-pool
+          Demo only. These mock tokens have a public mint for testing on Ethereum Sepolia. Demo-pool
           LP positions are minted via the repo script, not here.
         </p>
       </div>

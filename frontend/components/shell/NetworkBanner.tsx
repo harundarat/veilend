@@ -12,7 +12,7 @@ export function NetworkBanner() {
       <div className="mx-auto flex max-w-[1280px] flex-wrap items-center gap-x-4 gap-y-2 px-6 py-2.5">
         <span className="flex items-center gap-2 font-mono text-xs text-[var(--color-danger)]">
           <AlertIcon className="size-4" />
-          Wrong network — switch to Sepolia / Anvil
+          Wrong network — switch to Ethereum Sepolia
         </span>
         <button
           type="button"

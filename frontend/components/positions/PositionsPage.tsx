@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useAccount, useChainId } from "wagmi";
-import { foundry, sepolia } from "wagmi/chains";
+import { sepolia } from "wagmi/chains";
 import {
   InventoryCard,
   InventoryCardSkeleton,
@@ -65,9 +65,7 @@ export function PositionsPage({ positionId }: { positionId?: string }) {
     extraIds,
   });
   const eventsEnabled =
-    connected &&
-    Boolean(address) &&
-    (chainId === foundry.id || discovered.unavailable);
+    connected && Boolean(address) && discovered.unavailable;
   const events = useWalletLoanEventIds({
     wallet: address,
     chainId,
