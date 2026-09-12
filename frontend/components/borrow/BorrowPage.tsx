@@ -13,7 +13,6 @@ import {
   useReadContract,
   useReadContracts,
 } from "wagmi";
-import { ConfirmModal } from "@/components/shell/ConfirmModal";
 import { AlertIcon, ExternalIcon } from "@/components/shell/icons";
 import { PositionCard, PositionCardSkeleton } from "@/components/borrow/PositionCard";
 import {
@@ -50,7 +49,7 @@ import { useDiscoveredPositions } from "@/lib/positions/use-positions";
 import { useWalletUi } from "@/lib/use-wallet-ui";
 import { useWriteTx } from "@/lib/use-write-tx";
 
-type PendingKind = "approve" | "lock" | "approve-stable" | "repay";
+type PendingKind = "approve" | "lock";
 
 const STATUS_META: Record<
   "idle" | "locked" | "active" | "repaid" | "liquidated",
@@ -175,7 +174,6 @@ export function BorrowPage() {
   const [submittedId, setSubmittedId] = useState<bigint | null>(null);
   const [pending, setPending] = useState<PendingKind | null>(null);
   const [lastTx, setLastTx] = useState<string | null>(null);
-  const [repayConfirm, setRepayConfirm] = useState(false);
   const [dismissed, setDismissed] = useState(false);
   const [txFailed, setTxFailed] = useState(false);
 
@@ -238,12 +236,6 @@ export function BorrowPage() {
         functionName: "getLoan",
         args: [tokenId],
       },
-      {
-        address: ADDRESSES.vdusd,
-        abi: erc20Abi,
-        functionName: "allowance",
-        args: [address ?? zeroAddress, ADDRESSES.vault],
-      },
     ],
     query: {
       enabled: readsEnabled,
@@ -287,10 +279,6 @@ export function BorrowPage() {
     positionQuery.data?.[5]?.status === "success"
       ? asLoan(positionQuery.data[5].result)
       : undefined;
-  const allowance =
-    positionQuery.data?.[6]?.status === "success"
-      ? (positionQuery.data[6].result as bigint)
-      : BigInt(0);
 
   const nftApproved =
     sameAddress(approvedSpender, ADDRESSES.vault) || approvedForAll;
@@ -310,7 +298,6 @@ export function BorrowPage() {
 
   const inVault = sameAddress(owner, ADDRESSES.vault);
   const repayAmount = loan ? repayAmountOf(loan) : BigInt(0);
-  const stableApproved = repayAmount > BigInt(0) && allowance >= repayAmount;
   const hasTerms =
     validPhase === "active" ||
     validPhase === "repaid" ||
@@ -419,26 +406,6 @@ export function BorrowPage() {
       if (!approved) return;
     }
     await lockPosition(id);
-  };
-
-  const approveStable = () => {
-    if (repayAmount === BigInt(0)) return;
-    return run("approve-stable", "Approve stable", {
-      address: ADDRESSES.vdusd,
-      abi: erc20Abi,
-      functionName: "approve",
-      args: [ADDRESSES.vault, repayAmount],
-    });
-  };
-
-  const repay = () => {
-    if (submittedId == null) return;
-    return run("repay", "Repay loan", {
-      address: ADDRESSES.vault,
-      abi: vaultAbi,
-      functionName: "repayLoan",
-      args: [submittedId],
-    });
   };
 
   if (!connected && !wrongNetwork) {
@@ -674,56 +641,10 @@ export function BorrowPage() {
               phase={validPhase}
               pending={pending}
               canWrite={canWrite}
+              positionId={submittedId}
               onApprove={approveNft}
               onLock={lockPosition}
             />
-          ) : null}
-
-          {validPhase === "active" ? (
-            <section className="border-2 border-[var(--color-danger-dim)] bg-[color-mix(in_srgb,var(--color-danger)_6%,var(--color-panel))] p-6">
-              <div className="flex items-center gap-2">
-                <span className="size-1.5 rounded-full bg-[var(--color-danger)]" />
-                <h2 className="font-mono text-sm uppercase tracking-widest text-[var(--color-ink)]">
-                  Repay
-                </h2>
-              </div>
-              <div className="mt-4 flex items-baseline justify-between border-b border-[var(--color-hairline)] pb-3">
-                <span className="font-mono text-[11px] uppercase tracking-widest text-[var(--color-ink-dim)]">
-                  Repay Amount
-                </span>
-                <span className="font-mono text-2xl font-bold tabular-nums text-[var(--color-ink)]">
-                  {formatToken(repayAmount, LOAN_TOKEN_DECIMALS)}{" "}
-                  <span className="text-sm font-normal text-[var(--color-ink-dim)]">
-                    {LOAN_TOKEN_SYMBOL}
-                  </span>
-                </span>
-              </div>
-              <div className="mt-4 flex flex-wrap gap-3">
-                <button
-                  type="button"
-                  onClick={approveStable}
-                  disabled={!canWrite || stableApproved || pending === "approve-stable"}
-                  title={stableApproved ? "Stablecoin already approved" : undefined}
-                  className="inline-flex items-center gap-2 border border-[var(--color-hairline-hi)] bg-[var(--color-panel-hi)] px-5 py-2.5 font-mono text-xs font-semibold uppercase tracking-wider text-[var(--color-ink)] transition-colors hover:border-[var(--color-ink-dim)] disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  {pending === "approve-stable" && <Spinner className="size-4" />}
-                  {stableApproved ? "Stable approved" : "Approve stable"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setRepayConfirm(true)}
-                  disabled={!canWrite || !stableApproved || pending === "repay"}
-                  title={!stableApproved ? "Approve the stablecoin first" : undefined}
-                  className="inline-flex items-center gap-2 border border-[var(--color-danger)] bg-[var(--color-danger)] px-5 py-2.5 font-mono text-xs font-semibold uppercase tracking-wider text-[var(--color-ground)] transition-colors hover:bg-[var(--color-danger-dim)] disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  {pending === "repay" && <Spinner className="size-4" />}
-                  Repay
-                </button>
-              </div>
-              <p className="mt-4 font-mono text-[11px] leading-relaxed text-[var(--color-ink-faint)]">
-                LP fees are not auto-collected. You can claim them once your position NFT is returned to your wallet.
-              </p>
-            </section>
           ) : null}
         </div>
 
@@ -879,22 +800,6 @@ export function BorrowPage() {
           Read How it works
         </Link>
       </p>
-
-      <ConfirmModal
-        open={repayConfirm}
-        title="Repay loan"
-        amountLabel="Repay Amount"
-        amount={`${formatToken(repayAmount, LOAN_TOKEN_DECIMALS)} ${LOAN_TOKEN_SYMBOL}`}
-        confirmLabel="Confirm repay"
-        danger
-        onCancel={() => setRepayConfirm(false)}
-        onConfirm={() => {
-          setRepayConfirm(false);
-          void repay();
-        }}
-      >
-        Repay principal plus interest to close the loan and return your position NFT to your wallet.
-      </ConfirmModal>
     </div>
   );
 }
@@ -903,12 +808,14 @@ function Stepper({
   phase,
   pending,
   canWrite,
+  positionId,
   onApprove,
   onLock,
 }: {
   phase: Phase;
   pending: PendingKind | null;
   canWrite: boolean;
+  positionId: bigint | null;
   onApprove: () => void;
   onLock: () => void;
 }) {
@@ -1011,6 +918,14 @@ function Stepper({
                   <Spinner className="size-3.5" />
                   Polling…
                 </span>
+              ) : null}
+              {i === 3 && phase === "active" && positionId != null ? (
+                <Link
+                  href={`/loan/${positionId.toString()}`}
+                  className="inline-flex items-center gap-2 border border-[var(--color-acid)] bg-[var(--color-acid)] px-4 py-2 font-mono text-xs font-semibold uppercase tracking-wider text-[var(--color-ground)] transition-colors hover:bg-[var(--color-acid-dim)]"
+                >
+                  Manage loan
+                </Link>
               ) : null}
             </div>
           </div>

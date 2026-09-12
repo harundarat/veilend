@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { type Address, zeroAddress } from "viem";
 import { sepolia } from "wagmi/chains";
@@ -361,6 +361,60 @@ function Timeline({ items, chainId }: { items: TimelineItem[]; chainId: number }
   );
 }
 
+function RepayStepper({
+  stableApproved,
+  pending,
+}: {
+  stableApproved: boolean;
+  pending: PendingKind | null;
+}) {
+  const approveDone = stableApproved || pending === "repay";
+  const approveCurrent = pending === "approve-stable";
+  const repayCurrent = pending === "repay";
+  const items = [
+    {
+      key: "approve",
+      label: `Approve ${LOAN_TOKEN_SYMBOL}`,
+      done: approveDone,
+      current: approveCurrent,
+    },
+    {
+      key: "repay",
+      label: "Repay loan",
+      done: false,
+      current: repayCurrent,
+    },
+  ];
+
+  return (
+    <ol className="mt-4 flex flex-col gap-2">
+      {items.map((item, index) => (
+        <li key={item.key} className="flex items-center gap-2.5">
+          <span
+            className={`size-3.5 shrink-0 rounded-full border-2 ${
+              item.done
+                ? "border-[var(--color-acid)] bg-[var(--color-acid)]"
+                : item.current
+                  ? "border-[var(--color-acid)] bg-[var(--color-panel)]"
+                  : "border-[var(--color-hairline-hi)] bg-[var(--color-panel)]"
+            }`}
+          />
+          <span
+            className={`inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-widest ${
+              item.done || item.current
+                ? "text-[var(--color-ink)]"
+                : "text-[var(--color-ink-faint)]"
+            }`}
+          >
+            {item.current ? <Spinner className="size-3" /> : null}
+            {index + 1}. {item.label}
+          </span>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
 function ActionPanel({
   loan,
   status,
@@ -371,7 +425,6 @@ function ActionPanel({
   stableApproved,
   pending,
   repayAmount,
-  onApprove,
   onRepay,
 }: {
   loan: VaultLoan;
@@ -383,7 +436,6 @@ function ActionPanel({
   stableApproved: boolean;
   pending: PendingKind | null;
   repayAmount: bigint;
-  onApprove: () => void;
   onRepay: () => void;
 }) {
   if (status === "repaid" || status === "liquidated") {
@@ -489,28 +541,28 @@ function ActionPanel({
           </span>
         </span>
       </div>
-      <div className="mt-4 flex flex-col gap-3">
-        <button
-          type="button"
-          onClick={onApprove}
-          disabled={!canWrite || stableApproved || pending === "approve-stable"}
-          className="inline-flex w-full items-center justify-center gap-2 border border-[var(--color-hairline-hi)] bg-[var(--color-panel-hi)] px-5 py-2.5 font-mono text-xs font-semibold uppercase tracking-wider text-[var(--color-ink)] transition-colors hover:border-[var(--color-ink-dim)] disabled:opacity-40"
-        >
-          {pending === "approve-stable" ? <Spinner className="size-4" /> : null}
-          {stableApproved ? `${LOAN_TOKEN_SYMBOL} approved` : `Approve ${LOAN_TOKEN_SYMBOL}`}
-        </button>
-        <button
-          type="button"
-          onClick={onRepay}
-          disabled={!canWrite || !stableApproved || pending === "repay"}
-          title={!stableApproved ? `Approve ${LOAN_TOKEN_SYMBOL} first` : undefined}
-          className="inline-flex w-full items-center justify-center gap-2 border border-[var(--color-acid)] bg-[var(--color-acid)] px-5 py-2.5 font-mono text-xs font-semibold uppercase tracking-wider text-[var(--color-ground)] transition-colors hover:bg-[var(--color-acid-dim)] disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          {pending === "repay" ? <Spinner className="size-4" /> : null}
-          Repay loan
-        </button>
-      </div>
-      <p className="mt-4 font-mono text-[11px] leading-relaxed text-[var(--color-ink-faint)]">
+      <RepayStepper stableApproved={stableApproved} pending={pending} />
+      <button
+        type="button"
+        onClick={onRepay}
+        disabled={!canWrite || pending !== null}
+        className="mt-4 inline-flex w-full items-center justify-center gap-2 border border-[var(--color-acid)] bg-[var(--color-acid)] px-5 py-2.5 font-mono text-xs font-semibold uppercase tracking-wider text-[var(--color-ground)] transition-colors hover:bg-[var(--color-acid-dim)] disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        {pending ? <Spinner className="size-4" /> : null}
+        {pending === "approve-stable"
+          ? `Approving ${LOAN_TOKEN_SYMBOL}…`
+          : pending === "repay"
+            ? "Repaying…"
+            : "Repay loan"}
+      </button>
+      {pending || !stableApproved ? (
+        <p className="mt-3 font-mono text-[11px] leading-relaxed text-[var(--color-ink-faint)]">
+          {pending
+            ? "Check your wallet to sign."
+            : `Two wallet signatures: approve ${LOAN_TOKEN_SYMBOL}, then repay.`}
+        </p>
+      ) : null}
+      <p className="mt-3 font-mono text-[11px] leading-relaxed text-[var(--color-ink-faint)]">
         Accrued LP fees remain with your position and are not deducted during repayment. Once the NFT returns to your wallet, fees can be claimed directly from the position.
       </p>
     </section>
@@ -645,6 +697,8 @@ function LoanDetail({ rawId }: { rawId: string }) {
 
   const [pending, setPending] = useState<PendingKind | null>(null);
   const [repayConfirm, setRepayConfirm] = useState(false);
+  const [approveConfirmed, setApproveConfirmed] = useState(false);
+  const flowLock = useRef(false);
 
   const readsEnabled = tokenId != null;
   const ownerKey = address ?? zeroAddress;
@@ -712,7 +766,8 @@ function LoanDetail({ rawId }: { rawId: string }) {
   if (!loan || !found || !status) return <NotFoundState id={rawId} />;
 
   const repayAmount = repayAmountOf(loan);
-  const stableApproved = repayAmount > BigInt(0) && allowance >= repayAmount;
+  const stableApproved =
+    approveConfirmed || (repayAmount > BigInt(0) && allowance >= repayAmount);
   const deadlineMs =
     loan.defaultDeadline > BigInt(0) ? Number(loan.defaultDeadline) * 1000 : 0;
   const expiryMs = loan.expiry > BigInt(0) ? Number(loan.expiry) * 1000 : 0;
@@ -722,35 +777,35 @@ function LoanDetail({ rawId }: { rawId: string }) {
   const awaitingTerms = status === "locked";
   const hasTerms = status === "active" || status === "repaid" || status === "liquidated";
 
-  const run = async (kind: PendingKind, title: string, request: Parameters<typeof runTx>[1]) => {
-    if (!canWrite) return;
-    setPending(kind);
+  const repayFlow = async () => {
+    if (!canWrite || tokenId == null || repayAmount === BigInt(0) || flowLock.current) return;
+    flowLock.current = true;
     try {
-      await runTx(title, request);
+      if (!stableApproved) {
+        setPending("approve-stable");
+        await runTx("Approve stable", {
+          address: ADDRESSES.vdusd,
+          abi: erc20Abi,
+          functionName: "approve",
+          args: [ADDRESSES.vault, repayAmount],
+        });
+        setApproveConfirmed(true);
+        await queryClient.invalidateQueries();
+      }
+      setPending("repay");
+      await runTx("Repay loan", {
+        address: ADDRESSES.vault,
+        abi: vaultAbi,
+        functionName: "repayLoan",
+        args: [tokenId],
+      });
       await queryClient.invalidateQueries();
+    } catch {
+      // useWriteTx already toasts reject/revert
     } finally {
+      flowLock.current = false;
       setPending(null);
     }
-  };
-
-  const approveStable = () => {
-    if (repayAmount === BigInt(0)) return;
-    return run("approve-stable", "Approve stable", {
-      address: ADDRESSES.vdusd,
-      abi: erc20Abi,
-      functionName: "approve",
-      args: [ADDRESSES.vault, repayAmount],
-    });
-  };
-
-  const repay = () => {
-    if (tokenId == null) return;
-    return run("repay", "Repay loan", {
-      address: ADDRESSES.vault,
-      abi: vaultAbi,
-      functionName: "repayLoan",
-      args: [tokenId],
-    });
   };
 
   const nftOwnerLabel = !owner
@@ -929,7 +984,6 @@ function LoanDetail({ rawId }: { rawId: string }) {
             stableApproved={stableApproved}
             pending={pending}
             repayAmount={repayAmount}
-            onApprove={() => void approveStable()}
             onRepay={() => setRepayConfirm(true)}
           />
         </div>
@@ -944,10 +998,12 @@ function LoanDetail({ rawId }: { rawId: string }) {
         onCancel={() => setRepayConfirm(false)}
         onConfirm={() => {
           setRepayConfirm(false);
-          void repay();
+          void repayFlow();
         }}
       >
-        Repay principal plus flat interest to close the loan and return your position NFT to your wallet.
+        {stableApproved
+          ? "Repay principal plus flat interest to close the loan and return your position NFT to your wallet."
+          : `You will sign two transactions: first to approve ${LOAN_TOKEN_SYMBOL} spending, then to repay. Check your wallet after each prompt. Repayment returns your position NFT to your wallet.`}
       </ConfirmModal>
     </Shell>
   );
@@ -955,6 +1011,7 @@ function LoanDetail({ rawId }: { rawId: string }) {
 
 export function LoanPage({ positionId }: { positionId?: string }) {
   const rawId = positionId?.trim() ?? "";
+  const { address } = useAccount();
   if (!rawId) return <LoanLanding />;
-  return <LoanDetail rawId={rawId} />;
+  return <LoanDetail key={`${address ?? ""}:${rawId}`} rawId={rawId} />;
 }
