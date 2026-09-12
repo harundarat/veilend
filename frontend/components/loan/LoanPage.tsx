@@ -181,6 +181,19 @@ function Metric({
   );
 }
 
+function SectionHeading({ index, label }: { index: string; label: string }) {
+  return (
+    <div className="mb-4 flex items-baseline gap-3 border-b border-[var(--color-hairline)] pb-3">
+      <span className="font-mono text-xs tracking-[0.35em] text-[var(--color-acid)]">
+        {index}
+      </span>
+      <span className="font-mono text-xs uppercase tracking-[0.3em] text-[var(--color-ink-dim)]">
+        {label}
+      </span>
+    </div>
+  );
+}
+
 function Shell({ children }: { children: React.ReactNode }) {
   return <div className="pb-24 pt-12">{children}</div>;
 }
@@ -848,14 +861,7 @@ function LoanDetail({ rawId }: { rawId: string }) {
       <div className="grid gap-8 lg:grid-cols-[1.5fr_1fr]">
         <div className="flex flex-col gap-8">
           <section>
-            <div className="mb-4 flex items-baseline gap-3 border-b border-[var(--color-hairline)] pb-3">
-              <span className="font-mono text-xs tracking-[0.35em] text-[var(--color-acid)]">
-                01
-              </span>
-              <span className="font-mono text-xs uppercase tracking-[0.3em] text-[var(--color-ink-dim)]">
-                On-chain values
-              </span>
-            </div>
+            <SectionHeading index="01" label="On-chain values" />
             <div className="grid grid-cols-2 gap-px overflow-hidden border border-[var(--color-hairline)] bg-[var(--color-hairline)] sm:grid-cols-3">
               <Metric
                 label="Collateral value"
@@ -959,14 +965,7 @@ function LoanDetail({ rawId }: { rawId: string }) {
           </section>
 
           <section>
-            <div className="mb-4 flex items-baseline gap-3 border-b border-[var(--color-hairline)] pb-3">
-              <span className="font-mono text-xs tracking-[0.35em] text-[var(--color-acid)]">
-                02
-              </span>
-              <span className="font-mono text-xs uppercase tracking-[0.3em] text-[var(--color-ink-dim)]">
-                Event timeline
-              </span>
-            </div>
+            <SectionHeading index="02" label="Event timeline" />
             <div className="border border-[var(--color-hairline)] bg-[var(--color-panel)] p-6">
               <Timeline items={timeline} chainId={chainId} />
             </div>
@@ -974,6 +973,7 @@ function LoanDetail({ rawId }: { rawId: string }) {
         </div>
 
         <div className="lg:sticky lg:top-[84px] lg:self-start">
+          <SectionHeading index="03" label="Repay" />
           <ActionPanel
             loan={loan}
             status={status}
