@@ -635,7 +635,9 @@ export function BorrowPage() {
               ) : null}
             </section>
           ) : null}
+        </div>
 
+        <div className="flex flex-col gap-6 lg:sticky lg:top-[84px] lg:self-start">
           {validPhase ? (
             <Stepper
               phase={validPhase}
@@ -646,9 +648,7 @@ export function BorrowPage() {
               onLock={lockPosition}
             />
           ) : null}
-        </div>
 
-        <div className="flex flex-col gap-6 lg:sticky lg:top-[84px] lg:self-start">
           <section className="border border-[var(--color-hairline)] bg-[var(--color-panel)] p-6">
             <div className="mb-5 flex items-center justify-between gap-3">
               <h2 className="font-mono text-sm uppercase tracking-widest text-[var(--color-ink)]">
@@ -853,15 +853,15 @@ function Stepper({
 
   return (
     <section className="border border-[var(--color-hairline)] bg-[var(--color-panel)] p-6">
-      <h2 className="mb-5 font-mono text-sm uppercase tracking-widest text-[var(--color-ink)]">
+      <h2 className="mb-4 font-mono text-sm uppercase tracking-widest text-[var(--color-ink)]">
         Flow
       </h2>
       <div className="flex flex-col">
         {stages.map((stage, i) => (
-          <div key={stage.title} className="relative flex gap-4 pb-6 last:pb-0">
+          <div key={stage.title} className="relative flex gap-3 pb-4 last:pb-0">
             {i < stages.length - 1 ? (
               <span
-                className={`absolute top-9 bottom-0 left-[15px] w-px ${
+                className={`absolute top-8 bottom-0 left-[15px] w-px ${
                   stage.done ? "bg-[var(--color-acid-dim)]" : "bg-[var(--color-hairline)]"
                 }`}
               />
@@ -877,7 +877,7 @@ function Stepper({
             >
               {stage.done ? "✓" : i + 1}
             </div>
-            <div className="flex flex-1 flex-wrap items-center justify-between gap-3 pt-0.5">
+            <div className="flex min-w-0 flex-1 flex-col gap-2 pt-0.5">
               <div>
                 <p
                   className={`font-mono text-sm ${
@@ -896,7 +896,7 @@ function Stepper({
                   type="button"
                   onClick={onApprove}
                   disabled={!canWrite || pending === "approve"}
-                  className="inline-flex items-center gap-2 border border-[var(--color-acid)] bg-[var(--color-acid)] px-4 py-2 font-mono text-xs font-semibold uppercase tracking-wider text-[var(--color-ground)] transition-colors hover:bg-[var(--color-acid-dim)] disabled:opacity-60"
+                  className="inline-flex w-fit items-center gap-2 border border-[var(--color-acid)] bg-[var(--color-acid)] px-4 py-2 font-mono text-xs font-semibold uppercase tracking-wider text-[var(--color-ground)] transition-colors hover:bg-[var(--color-acid-dim)] disabled:opacity-60"
                 >
                   {pending === "approve" && <Spinner className="size-3.5" />}
                   Approve NFT
@@ -907,7 +907,7 @@ function Stepper({
                   type="button"
                   onClick={onLock}
                   disabled={!canWrite || pending === "lock"}
-                  className="inline-flex items-center gap-2 border border-[var(--color-acid)] bg-[var(--color-acid)] px-4 py-2 font-mono text-xs font-semibold uppercase tracking-wider text-[var(--color-ground)] transition-colors hover:bg-[var(--color-acid-dim)] disabled:opacity-60"
+                  className="inline-flex w-fit items-center gap-2 border border-[var(--color-acid)] bg-[var(--color-acid)] px-4 py-2 font-mono text-xs font-semibold uppercase tracking-wider text-[var(--color-ground)] transition-colors hover:bg-[var(--color-acid-dim)] disabled:opacity-60"
                 >
                   {pending === "lock" && <Spinner className="size-3.5" />}
                   Lock position
@@ -922,7 +922,7 @@ function Stepper({
               {i === 3 && phase === "active" && positionId != null ? (
                 <Link
                   href={`/loan/${positionId.toString()}`}
-                  className="inline-flex items-center gap-2 border border-[var(--color-acid)] bg-[var(--color-acid)] px-4 py-2 font-mono text-xs font-semibold uppercase tracking-wider text-[var(--color-ground)] transition-colors hover:bg-[var(--color-acid-dim)]"
+                  className="inline-flex w-fit items-center gap-2 border border-[var(--color-acid)] bg-[var(--color-acid)] px-4 py-2 font-mono text-xs font-semibold uppercase tracking-wider text-[var(--color-ground)] transition-colors hover:bg-[var(--color-acid-dim)]"
                 >
                   Manage loan
                 </Link>
