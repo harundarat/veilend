@@ -129,8 +129,8 @@ export function PositionsPage({ positionId }: { positionId?: string }) {
           Your positions
         </h1>
         <p className="mt-3 max-w-2xl text-sm leading-relaxed text-[var(--color-ink-dim)]">
-          Everything owned or locked by the connected wallet. Owner badges show where each NFT
-          currently sits — in your wallet or custodied by the vault.
+          Everything owned or locked by the connected wallet. Closed is loan history — a repaid
+          position returns to In wallet and can be locked again.
         </p>
       </header>
 

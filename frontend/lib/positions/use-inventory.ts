@@ -83,7 +83,7 @@ export function useHydrateInventory({
       const poolResult = data[base + 1];
       const liquidityResult = data[base + 2];
       const loanResult = data[base + 3];
-      const item = classifyInventory({
+      const classified = classifyInventory({
         tokenId: tokenIds[i],
         owner:
           ownerResult?.status === "success"
@@ -98,7 +98,7 @@ export function useHydrateInventory({
         loan: loanResult?.status === "success" ? asLoan(loanResult.result) : undefined,
         wallet,
       });
-      if (item) cards.push(item);
+      cards.push(...classified);
     }
     return cards;
   }, [query.data, tokenIds, wallet]);

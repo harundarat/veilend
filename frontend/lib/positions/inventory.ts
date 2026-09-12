@@ -5,12 +5,7 @@ import {
   type PoolKeyResult,
   type VaultLoan,
 } from "@/lib/contracts";
-import {
-  hasLoan,
-  isBorrowerOf,
-  pairLabel,
-  sameAddress,
-} from "@/lib/positions/hydrate";
+import { isBorrowerOf, pairLabel, sameAddress } from "@/lib/positions/hydrate";
 
 export type InventoryTab = "wallet" | "vault" | "closed";
 
@@ -34,6 +29,7 @@ export type InventoryItem = {
   loan?: VaultLoan;
   tab: InventoryTab;
   status: InventoryStatus;
+  previouslyUsed?: boolean;
 };
 
 export function inventoryStatus(loan: VaultLoan | undefined): InventoryStatus {
@@ -66,30 +62,39 @@ export function classifyInventory(input: {
   poolKey?: PoolKeyResult;
   loan?: VaultLoan;
   wallet?: Address;
-}): InventoryItem | null {
+}): InventoryItem[] {
   const { tokenId, owner, poolKey, loan, wallet } = input;
-  if (!wallet) return null;
+  if (!wallet) return [];
 
   const isOwner = sameAddress(owner, wallet);
   const isBorrower = isBorrowerOf(loan, wallet);
   const status = inventoryStatus(loan);
   const liquidity = input.liquidity ?? BigInt(0);
   const demo = poolKey ? isDemoPool(poolKey) : false;
+  const items: InventoryItem[] = [];
 
   if (status === "closed" || status === "liquidated") {
-    if (!isBorrower && !isOwner) return null;
-    if (poolKey && !demo) return null;
-    return { tokenId, owner, liquidity, poolKey, loan, tab: "closed", status };
+    if ((isBorrower || isOwner) && (!poolKey || demo)) {
+      items.push({ tokenId, owner, liquidity, poolKey, loan, tab: "closed", status });
+    }
+  } else if (status === "active") {
+    if (isBorrower && (!poolKey || demo)) {
+      items.push({ tokenId, owner, liquidity, poolKey, loan, tab: "vault", status });
+    }
+    return items;
   }
 
-  if (status === "active") {
-    if (!isBorrower) return null;
-    if (poolKey && !demo) return null;
-    return { tokenId, owner, liquidity, poolKey, loan, tab: "vault", status };
+  if (isOwner && poolKey && demo && status !== "liquidated") {
+    items.push({
+      tokenId,
+      owner,
+      liquidity,
+      poolKey,
+      tab: "wallet",
+      status: "ready",
+      previouslyUsed: status === "closed",
+    });
   }
 
-  if (!isOwner || !poolKey || !demo) return null;
-  if (hasLoan(loan) && isBorrower) return null;
-
-  return { tokenId, owner, liquidity, poolKey, loan, tab: "wallet", status: "ready" };
+  return items;
 }

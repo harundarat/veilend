@@ -656,7 +656,7 @@ export function BorrowPage() {
                   <span className="text-[var(--color-ok)]">Approved → vault</span>
                 )}
               </DataRow>
-              <DataRow label="Liquidity">
+              <DataRow label="Size">
                 <span className="tabular-nums">
                   {liquidity !== undefined ? formatLiquidity(liquidity) : "—"}
                 </span>
@@ -672,6 +672,11 @@ export function BorrowPage() {
                         ? "Liquidated"
                         : "Repaid"}
               </DataRow>
+              {loan?.repaid && (validPhase === "found" || validPhase === "approved") ? (
+                <p className="mt-4 font-mono text-[11px] leading-relaxed text-[var(--color-ink-faint)]">
+                  This position was repaid and returned to your wallet. Lock it again to request new terms.
+                </p>
+              ) : null}
             </section>
           ) : null}
 
@@ -809,7 +814,7 @@ export function BorrowPage() {
               </div>
             ) : validPhase === "found" || validPhase === "approved" ? (
               <div>
-                <DataRow label="Liquidity">
+                <DataRow label="Size">
                   <span className="tabular-nums">
                     {liquidity !== undefined ? formatLiquidity(liquidity) : "—"}
                   </span>
@@ -818,7 +823,9 @@ export function BorrowPage() {
                   <span className="text-[var(--color-ink-dim)]">Computed upon locking</span>
                 </DataRow>
                 <p className="mt-4 font-mono text-[11px] leading-relaxed text-[var(--color-ink-faint)]">
-                  On-chain preview only. Collateral value is computed by the vault once confidential loan terms are settled.
+                  {loan?.repaid
+                    ? "Previous loan is closed. Lock again to request a new confidential term sheet."
+                    : "On-chain preview only. Collateral value is computed by the vault once confidential loan terms are settled."}
                 </p>
               </div>
             ) : (

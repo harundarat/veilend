@@ -197,7 +197,7 @@ export function derivePhase(
   const isBorrower = isBorrowerOf(loan, wallet);
 
   if (loan?.liquidated && (isBorrower || inVault)) return "liquidated";
-  if (loan?.repaid && (isOwner || isBorrower)) return "repaid";
+  if (loan?.repaid && isBorrower && !isOwner) return "repaid";
   if (loan?.active && isBorrower) return "active";
   if (loan?.locked && !loan.active && isBorrower) return "locked";
   if (isOwner && approved) return "approved";

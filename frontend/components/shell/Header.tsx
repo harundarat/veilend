@@ -10,7 +10,6 @@ import { WalletControl } from "./WalletControl";
 type NavItem = {
   label: string;
   to: string;
-  badge?: string;
 };
 
 const NAV: NavItem[] = [
@@ -18,7 +17,7 @@ const NAV: NavItem[] = [
   { label: "Borrow", to: "/app" },
   { label: "Loan", to: "/loan" },
   { label: "Liquidate", to: "/liquidate" },
-  { label: "Positions", to: "/positions", badge: "optional" },
+  { label: "Positions", to: "/positions" },
 ];
 
 function isActivePath(pathname: string, to: string) {
@@ -38,14 +37,7 @@ function NavItemLink({ item }: { item: NavItem }) {
           : "text-[var(--color-ink-dim)] hover:text-[var(--color-ink)]"
       }`}
     >
-      <span className="inline-flex items-center gap-1.5">
-        {item.label}
-        {item.badge ? (
-          <span className="border border-[var(--color-hairline-hi)] px-1 py-px text-[9px] uppercase tracking-widest text-[var(--color-ink-faint)]">
-            {item.badge}
-          </span>
-        ) : null}
-      </span>
+      {item.label}
       <span
         className={`absolute -bottom-[19px] left-0 h-px w-full transition-colors ${
           isActive
@@ -134,16 +126,11 @@ export function Header() {
                   key={item.to}
                   href={item.to}
                   onClick={() => setOpen(false)}
-                  className={`flex items-center gap-2 border-b border-[var(--color-hairline)] py-3.5 font-mono text-sm tracking-tight last:border-b-0 ${
+                  className={`border-b border-[var(--color-hairline)] py-3.5 font-mono text-sm tracking-tight last:border-b-0 ${
                     isActive ? "text-[var(--color-acid)]" : "text-[var(--color-ink-dim)]"
                   }`}
                 >
                   {item.label}
-                  {item.badge ? (
-                    <span className="border border-[var(--color-hairline-hi)] px-1 py-px text-[9px] uppercase tracking-widest text-[var(--color-ink-faint)]">
-                      {item.badge}
-                    </span>
-                  ) : null}
                 </Link>
               );
             })}

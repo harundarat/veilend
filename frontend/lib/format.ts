@@ -26,7 +26,7 @@ export function formatBps(bps: bigint) {
 }
 
 export function formatLiquidity(value: bigint) {
-  return value.toLocaleString("en-US");
+  return formatToken(value, 18);
 }
 
 export function explorerTxUrl(hash: string, chainId: number) {

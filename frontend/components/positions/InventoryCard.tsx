@@ -65,6 +65,17 @@ export function InventoryCard({
   const meta = INVENTORY_STATUS_META[item.status];
   const terms = hasLoanTerms(item.loan);
   const id = item.tokenId.toString();
+  const returnedToWallet = item.tab === "closed" && ownerKind(item.owner) === "wallet";
+  const size =
+    item.tab !== "wallet" && terms && item.loan
+      ? {
+          label: "Collateral",
+          value: `${formatToken(item.loan.collateralValue, LOAN_TOKEN_DECIMALS)} ${LOAN_TOKEN_SYMBOL}`,
+        }
+      : {
+          label: "Size",
+          value: item.liquidity > BigInt(0) ? formatLiquidity(item.liquidity) : "—",
+        };
   const primary =
     item.tab === "wallet"
       ? { href: `/app?id=${id}`, label: "Open in Borrow" }
@@ -112,14 +123,10 @@ export function InventoryCard({
         </div>
         <div className="flex items-center justify-between gap-3">
           <span className="font-mono text-[11px] uppercase tracking-widest text-[var(--color-ink-dim)]">
-            Liquidity
+            {size.label}
           </span>
           <span className="font-mono text-sm tabular-nums text-[var(--color-ink)]">
-            {item.liquidity > BigInt(0)
-              ? formatLiquidity(item.liquidity)
-              : terms && item.loan
-                ? `${formatToken(item.loan.collateralValue, LOAN_TOKEN_DECIMALS)} ${LOAN_TOKEN_SYMBOL}`
-                : "—"}
+            {size.value}
           </span>
         </div>
         {item.tab !== "wallet" ? (
@@ -156,12 +163,31 @@ export function InventoryCard({
         ) : null}
       </div>
 
+      {item.tab === "wallet" && item.previouslyUsed ? (
+        <p className="mt-4 font-mono text-[11px] leading-relaxed text-[var(--color-ink-faint)]">
+          Previously used as collateral
+        </p>
+      ) : null}
+      {returnedToWallet ? (
+        <p className="mt-4 font-mono text-[11px] leading-relaxed text-[var(--color-ink-faint)]">
+          Returned to wallet — ready to lock again
+        </p>
+      ) : null}
+
       <Link
         href={primary.href}
         className="mt-6 flex items-center justify-center gap-2 border border-[var(--color-hairline-hi)] px-4 py-2.5 font-mono text-xs font-semibold uppercase tracking-wider text-[var(--color-ink)] transition-colors hover:border-[var(--color-acid)] hover:text-[var(--color-acid)]"
       >
         {primary.label} →
       </Link>
+      {returnedToWallet ? (
+        <Link
+          href={`/app?id=${id}`}
+          className="mt-2 text-center font-mono text-[11px] uppercase tracking-wider text-[var(--color-ink-dim)] transition-colors hover:text-[var(--color-acid)]"
+        >
+          Lock again →
+        </Link>
+      ) : null}
       {item.status === "liquidated" ? (
         <Link
           href={`/liquidate?id=${id}`}
