@@ -14,7 +14,6 @@ import {
   useReadContracts,
 } from "wagmi";
 import { ConfirmModal } from "@/components/shell/ConfirmModal";
-import { FaucetModal } from "@/components/shell/FaucetModal";
 import { AlertIcon, ExternalIcon } from "@/components/shell/icons";
 import { PositionCard, PositionCardSkeleton } from "@/components/borrow/PositionCard";
 import {
@@ -176,7 +175,6 @@ export function BorrowPage() {
   const [submittedId, setSubmittedId] = useState<bigint | null>(null);
   const [pending, setPending] = useState<PendingKind | null>(null);
   const [lastTx, setLastTx] = useState<string | null>(null);
-  const [faucetOpen, setFaucetOpen] = useState(false);
   const [repayConfirm, setRepayConfirm] = useState(false);
   const [dismissed, setDismissed] = useState(false);
   const [txFailed, setTxFailed] = useState(false);
@@ -471,22 +469,13 @@ export function BorrowPage() {
             Lock a position, borrow stablecoins
           </h1>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 border border-[var(--color-hairline-hi)] bg-[var(--color-panel-hi)] px-3 py-2 font-mono text-xs text-[var(--color-ink-dim)]">
-            <span className="uppercase tracking-widest text-[var(--color-ink-faint)]">
-              Stable balance
-            </span>
-            <span className="text-[var(--color-ink)]">
-              {formatToken(balance, LOAN_TOKEN_DECIMALS)} {LOAN_TOKEN_SYMBOL}
-            </span>
-          </div>
-          <button
-            type="button"
-            onClick={() => setFaucetOpen(true)}
-            className="border border-[var(--color-hairline-hi)] px-3 py-2 font-mono text-xs uppercase tracking-wider text-[var(--color-ink-dim)] transition-colors hover:border-[var(--color-acid)] hover:text-[var(--color-acid)]"
-          >
-            Faucet
-          </button>
+        <div className="flex items-center gap-2 border border-[var(--color-hairline-hi)] bg-[var(--color-panel-hi)] px-3 py-2 font-mono text-xs text-[var(--color-ink-dim)]">
+          <span className="uppercase tracking-widest text-[var(--color-ink-faint)]">
+            Stable balance
+          </span>
+          <span className="text-[var(--color-ink)]">
+            {formatToken(balance, LOAN_TOKEN_DECIMALS)} {LOAN_TOKEN_SYMBOL}
+          </span>
         </div>
       </header>
 
@@ -891,7 +880,6 @@ export function BorrowPage() {
         </Link>
       </p>
 
-      <FaucetModal open={faucetOpen} onClose={() => setFaucetOpen(false)} />
       <ConfirmModal
         open={repayConfirm}
         title="Repay loan"

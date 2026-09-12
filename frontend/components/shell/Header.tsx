@@ -18,6 +18,7 @@ const NAV: NavItem[] = [
   { label: "Loan", to: "/loan" },
   { label: "Liquidate", to: "/liquidate" },
   { label: "Positions", to: "/positions" },
+  { label: "Faucet", to: "/faucet" },
 ];
 
 function isActivePath(pathname: string, to: string) {
