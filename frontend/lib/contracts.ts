@@ -33,7 +33,6 @@ export const README_URL =
   "https://github.com/harundarat/veilend/blob/main/README.md";
 
 export const SAMPLE_POSITION_ID = "39014";
-export const DEMO_LOAN_IDS = ["8453", "7812", "6801", "5928"] as const;
 export const FAUCET_AMOUNT = BigInt(1000) * BigInt(10) ** BigInt(18);
 export const RELAYER_TIMEOUT_MS = 60_000;
 export const GRACE_PERIOD_SECONDS = 300;
