@@ -20,6 +20,10 @@
   --color-ok: #4fd18b;
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 html,
 body {
   height: 100%;

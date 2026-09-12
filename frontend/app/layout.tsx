@@ -17,9 +17,32 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Veilend",
+  title: "Veilend — Private Credit against Uniswap v4 LP",
   description:
-    "Borrow against a Uniswap v4 LP position. Personalized LTV is computed privately in a Chainlink CRE TEE.",
+    "Borrow stablecoins against your Uniswap v4 LP positions without unwinding them. Personalized LTV and APR are computed privately in a Chainlink CRE Confidential Workflow (TEE).",
+  keywords: [
+    "Uniswap v4",
+    "Chainlink CRE",
+    "Confidential Workflows",
+    "TEE",
+    "DeFi Lending",
+    "LP Collateral",
+    "ETHOnline 2026",
+    "v4 Hook",
+  ],
+  openGraph: {
+    title: "Veilend — Private Credit against Uniswap v4 LP",
+    description:
+      "Keep the yield. Unlock instant liquidity. Borrow against Uniswap v4 LP positions with confidential risk scoring inside Chainlink CRE enclaves.",
+    type: "website",
+    siteName: "Veilend",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Veilend — Private Credit against Uniswap v4 LP",
+    description:
+      "Keep the yield. Unlock instant liquidity. Borrow against Uniswap v4 LP positions with confidential risk scoring inside Chainlink CRE enclaves.",
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
