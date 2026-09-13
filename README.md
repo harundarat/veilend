@@ -98,6 +98,7 @@ Judges should treat these as known MVP constraints, not hidden gaps.
 - **Demo pool only.** Collateral is accepted only from the Veilend pool initialized with this hook. Existing Uniswap v4 LP (ETH/USDC, etc.) cannot be locked: a v4 hook is part of `PoolKey`, not of an NFT.
 - **No oracle.** `_valueOf` uses `amount0Snapshot + amount1Snapshot` when the relayer supplies a snapshot `> 0`; otherwise `collateralValue = getPositionLiquidity` (1 unit of liquidity = 1 mock-USD). The captured e2e used the liquidity fallback.
 - **Trusted relayer, not DON verification.** CRE ↔ vault is `onlyRelayer` + `cre workflow simulate` from a Bun script. Production would replace this with on-chain CRE report verification.
+- **Hosted UI is not a live demo.** [`veilend.vercel.app`](https://veilend.vercel.app) talks to Sepolia from the browser; it does not run CRE. After `lockPosition`, terms appear only if an operator is running the Bun relayer (`cre workflow simulate` as a local CLI, then `submitCreditReport`). There is no always-on hosted relayer. The captured walkthrough is the Anvil fork in [`docs/e2e-lock-disburse/`](docs/e2e-lock-disburse/). Judges can skip the UI; use the README commands and captured logs.
 - **No borrower accept of terms.** `lockPosition` is borrow intent. `submitCreditReport` sets `active = true` and transfers principal in the same call. The borrower does not sign LTV, APR, expiry, or principal. There is no `cancelLock` for `locked && !active` (the NFT stays in the vault if the report never arrives). Production would quote terms, then require an accept (or min-LTV / max-APR bounds at lock).
 - **Vault custody while locked.** `lockPosition` pulls the NFT into the vault. Revoking approval or transferring from the borrower afterwards does not move it and does not block `liquidate`. The hook still reverts `liquidityDelta < 0` until repay or liquidate unlocks. There is no vault `collectFees`; fees accrue on the position and the borrower collects after repay returns the NFT. On liquidate, fees are pulled with the liquidity.
 - **`GRACE_PERIOD = 300` seconds** — demo/testnet only. A production grace period would be days.
@@ -148,7 +149,7 @@ More deploy detail: [`contracts/README.md`](contracts/README.md).
 
 ## Demo video
 
-To be added for the ETHOnline 2026 submission (terminal + explorer; UI not required).
+To be added for the ETHOnline 2026 submission (terminal + explorer; UI not required). Optional UI exists at [`veilend.vercel.app`](https://veilend.vercel.app); it is not the judging path. Disbursement needs a local relayer with CRE CLI.
 
 | Time | Step |
 |---|---|
